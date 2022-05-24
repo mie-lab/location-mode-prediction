@@ -34,8 +34,15 @@ if __name__ == "__main__":
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     # device = torch.device("cpu")
 
+    # if_embed_mode_ls = [True, False]
+    # if_loss_mode_ls = [True, False]
+    
+    # for if_embed_mode in if_embed_mode_ls:
+    #     config.if_embed_mode = if_embed_mode
+    #     for if_loss_mode in if_loss_mode_ls:
+    #         config.if_loss_mode = if_loss_mode
+            
     result_ls = []
-
     for _ in range(5):
 
         # get data
@@ -51,7 +58,7 @@ if __name__ == "__main__":
         result_ls.append(perf)
 
         # test
-        perf, result_user_df = get_test_result(config, best_model, test_loader, device)
+        perf, result_user_df = get_test_result(config, model, test_loader, device)
 
         print(perf)
         result_user_df.to_csv(log_dir + "/test_user.csv")
@@ -59,5 +66,12 @@ if __name__ == "__main__":
 
     result_df = pd.DataFrame(result_ls)
     print(result_df)
-
-    result_df.to_csv(f"./outputs/{config.dataset}_{config.networkName}_4.csv", index=False)
+    
+    filename = f"./outputs/{config.networkName}"
+    # if if_loss_mode:
+    #     filename = filename + "_loss"
+    # if if_embed_mode:
+    #     filename = filename + "_feature"
+        
+    filename = filename + f"_len{config.predict_length}.csv" 
+    result_df.to_csv(filename, index=False)

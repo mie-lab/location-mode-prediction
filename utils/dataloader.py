@@ -51,28 +51,42 @@ class gc_dataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         selected = self.data[idx]
 
-        return_dict = {}
+        x_dict = {}
         # [sequence_len]
-        x = torch.tensor(selected["X"])
+        x = torch.tensor(selected["X"], dtype=torch.int64)
         # [1]
-        y = torch.tensor(selected["loc_Y"])
-        # [1]
-        mode = torch.tensor(selected["mode_Y"])
-
-        # [1]
-        return_dict["user"] = torch.tensor(selected["user_X"][0])
+        x_dict["user"] = torch.tensor(selected["user_X"][0], dtype=torch.int64)
         # [sequence_len] in half an hour
-        return_dict["time"] = torch.tensor(selected["start_min_X"] // 30)
+        x_dict["time"] = torch.tensor(selected["start_min_X"] // 30, dtype=torch.int64)
         # [sequence_len]
-        return_dict["mode"] = torch.tensor(selected["mode_X"])
+        x_dict["mode"] = torch.tensor(selected["mode_X"], dtype=torch.int64)
         # [sequence_len]
-        return_dict["length"] = torch.tensor(np.log(selected["length_X"]))
+        x_dict["length"] = torch.tensor(np.log(selected["length_X"]))
+        
+        tgt_dict={}
+        # [2+predict_length]
+        padding = np.zeros(self.predict_length)
+        tgt = torch.tensor(np.concatenate((selected["X"][-2:], padding)), dtype=torch.int64)
+        # [1]
+        tgt_dict["user"] = torch.tensor(selected["user_X"][0], dtype=torch.int64)
+        # [2+predict_length] in half an hour
+        tgt_dict["time"] = torch.tensor(np.concatenate(( selected["start_min_X"][-2:] // 30, padding)), dtype=torch.int64)
+        # [2+predict_length]
+        tgt_dict["mode"] = torch.tensor(np.concatenate((selected["mode_X"][-2:], padding)), dtype=torch.int64)
+        # [2+predict_length]
+        tgt_dict["length"] = torch.tensor(np.concatenate(( np.log(selected["length_X"][-2:]), padding)) )
+        
 
         if self.model_type == "deepmove":
             # [1]
-            return_dict["history_count"] = torch.tensor(selected["history_count"])
-
-        return x, y, mode, return_dict
+            x_dict["history_count"] = torch.tensor(selected["history_count"])
+            
+        # [1]
+        y = torch.tensor(selected["loc_Y"], dtype=torch.long)
+        # [1]
+        mode = torch.tensor(selected["mode_Y"], dtype=torch.long)
+        
+        return x, tgt, y, mode, x_dict, tgt_dict
 
     def generate_data(self):
 
@@ -186,7 +200,7 @@ class gc_dataset(torch.utils.data.Dataset):
                 continue
 
             # should be in the valid user ids
-            if not (row["id"] in self.valid_ids):
+            if len(hist) < 3:
                 continue
 
             data_dict = {}
@@ -203,9 +217,9 @@ class gc_dataset(torch.utils.data.Dataset):
             data_dict["mode_X"] = hist["mode"].values
             data_dict["length_X"] = hist["length_m"].values
 
-            # the next location is the target
+            # the next location is the Y
             data_dict["loc_Y"] = predict["location_id"].astype(int).values
-            # the next location is the target
+            # the next mode is the Y
             data_dict["mode_Y"] = predict["mode"].astype(int).values
             # print(data_dict["loc_Y"])
 
@@ -254,35 +268,47 @@ def load_pk_file(save_path):
 
 def collate_fn(batch):
     """function to collate data samples into batch tensors."""
-    src_batch, tgt_batch, mode_batch = [], [], []
+    # x, tgt, y, mode, x_dict, tgt_dict
+    x_batch, tgt_batch, y_batch, mode_batch = [], [], [], []
 
     # get one sample batch
-    dict_batch = {"len": []}
+    x_dict_batch = {"len": []}
+    tgt_dict_batch = {}
     for key in batch[0][-1]:
-        dict_batch[key] = []
+        x_dict_batch[key] = []
+        tgt_dict_batch[key] = []
 
-    for src_sample, tgt_sample, tgt_mode, return_dict in batch:
-        src_batch.append(src_sample)
+    for x_sample, tgt_sample, y_sample, mode_sample, x_dict, tgt_dict in batch:
+        x_batch.append(x_sample)
         tgt_batch.append(tgt_sample)
-        mode_batch.append(tgt_mode)
+        y_batch.append(y_sample)
+        mode_batch.append(mode_sample)
 
-        dict_batch["len"].append(len(src_sample))
+        x_dict_batch["len"].append(len(x_sample))
+        for key in x_dict:
+            x_dict_batch[key].append(x_dict[key])
+            
+        for key in tgt_dict:
+            tgt_dict_batch[key].append(tgt_dict[key])
 
-        for key in return_dict:
-            dict_batch[key].append(return_dict[key])
-
-    src_batch = pad_sequence(src_batch)
+    x_batch = pad_sequence(x_batch)
     tgt_batch = pad_sequence(tgt_batch)
+    y_batch = pad_sequence(y_batch)
     mode_batch = pad_sequence(mode_batch)
 
-    dict_batch["user"] = torch.tensor(dict_batch["user"], dtype=torch.int64)
-    dict_batch["len"] = torch.tensor(dict_batch["len"], dtype=torch.int64)
-    for key in dict_batch:
+    x_dict_batch["user"] = torch.tensor(x_dict_batch["user"], dtype=torch.int64)
+    x_dict_batch["len"] = torch.tensor(x_dict_batch["len"], dtype=torch.int64)
+    for key in x_dict_batch:
         if key in ["user", "len", "history_count"]:
             continue
-        dict_batch[key] = pad_sequence(dict_batch[key])
+        x_dict_batch[key] = pad_sequence(x_dict_batch[key])
+    tgt_dict_batch["user"] = torch.tensor(tgt_dict_batch["user"], dtype=torch.int64)
+    for key in tgt_dict_batch:
+        if key in ["user", "len", "history_count"]:
+            continue
+        tgt_dict_batch[key] = pad_sequence(tgt_dict_batch[key])
 
-    return src_batch, tgt_batch, mode_batch, dict_batch
+    return x_batch, tgt_batch, y_batch, mode_batch, x_dict_batch, tgt_dict_batch
 
 
 def deepmove_collate_fn(batch):
@@ -347,10 +373,12 @@ def test_dataloader(train_loader):
 
     ave_shape = 0
     y_shape = 0
-    for batch_idx, (inputs, Y, mode, dict) in tqdm(enumerate(train_loader)):
+    tgt_shape = 0
+    for batch_idx, (x, tgt, Y, mode, x_dict, tgt_dict) in tqdm(enumerate(train_loader)):
         # print("batch_idx ", batch_idx)
         # print(inputs.shape)
-        ave_shape += inputs.shape[0]
+        ave_shape += x.shape[0]
+        tgt_shape += tgt.shape[0]
         y_shape += Y.shape[0]
         # print(inputs)
         # print(mode)
@@ -365,6 +393,7 @@ def test_dataloader(train_loader):
         # if batch_idx > 10:
         #     break
     print(ave_shape / len(train_loader))
+    print(tgt_shape / len(train_loader))
     print(y_shape / len(train_loader))
 
 

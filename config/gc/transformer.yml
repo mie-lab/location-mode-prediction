@@ -15,6 +15,7 @@ misc:
 
   # how many days in the past we consider
   previous_day: 7
+  predict_length: 10
   verbose: False
   debug: False
   batch_size: 256
@@ -30,9 +31,9 @@ embedding:
 model:
   networkName: transformer
   # only for transformer
-  num_encoder_layers: 4
+  num_encoder_layers: 2
   nhead: 4
-  dim_feedforward: 512
+  dim_feedforward: 128
   dropout: 0.1
 
 optimiser:

@@ -121,6 +121,7 @@ def get_dataloaders(config):
         model_type=config.networkName,
         previous_day=config.previous_day,
         dataset=config.dataset,
+        predict_length=config.predict_length,
     )
     dataset_val = gc_dataset(
         config.source_root,
@@ -128,6 +129,7 @@ def get_dataloaders(config):
         model_type=config.networkName,
         previous_day=config.previous_day,
         dataset=config.dataset,
+        predict_length=config.predict_length,
     )
     dataset_test = gc_dataset(
         config.source_root,
@@ -135,6 +137,7 @@ def get_dataloaders(config):
         model_type=config.networkName,
         previous_day=config.previous_day,
         dataset=config.dataset,
+        predict_length=config.predict_length,
     )
 
     if config.networkName == "deepmove":
