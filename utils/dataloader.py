@@ -22,19 +22,17 @@ class gc_dataset(torch.utils.data.Dataset):
         data_type="train",
         previous_day=7,
         model_type="transformer",
-        predict_length=1,
     ):
         self.root = source_root
         self.data_type = data_type
         self.previous_day = previous_day
         self.model_type = model_type
         self.dataset = dataset
-        self.predict_length = predict_length
 
         self.data_dir = os.path.join(source_root, "temp")
         save_path = os.path.join(
             self.data_dir,
-            f"{self.model_type}_{previous_day}_{predict_length}_{data_type}.pk",
+            f"{self.model_type}_{previous_day}_{data_type}.pk",
         )
 
         if Path(save_path).is_file():
@@ -51,50 +49,40 @@ class gc_dataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         selected = self.data[idx]
 
-        x_dict = {}
         # [sequence_len]
         x = torch.tensor(selected["X"], dtype=torch.int64)
-        # [1]
-        x_dict["user"] = torch.tensor(selected["user_X"][0], dtype=torch.int64)
-        # [sequence_len] in half an hour
-        x_dict["time"] = torch.tensor(selected["start_min_X"] // 30, dtype=torch.int64)
+
+        x_dict = {}
         # [sequence_len]
         x_dict["mode"] = torch.tensor(selected["mode_X"], dtype=torch.int64)
+        # [1]
+        x_dict["user"] = torch.tensor(selected["user_X"][0], dtype=torch.int64)
+        # # [sequence_len] in 15 minutes
+        x_dict["time"] = torch.tensor(selected["start_min_X"] // 15, dtype=torch.int64)
         # [sequence_len]
-        x_dict["length"] = torch.tensor(np.log(selected["length_X"]))
-        
-        tgt_dict={}
-        # [2+predict_length]
-        padding = np.zeros(self.predict_length)
-        tgt = torch.tensor(np.concatenate((selected["X"][-2:], padding)), dtype=torch.int64)
-        # [1]
-        tgt_dict["user"] = torch.tensor(selected["user_X"][0], dtype=torch.int64)
-        # [2+predict_length] in half an hour
-        tgt_dict["time"] = torch.tensor(np.concatenate(( selected["start_min_X"][-2:] // 30, padding)), dtype=torch.int64)
-        # [2+predict_length]
-        tgt_dict["mode"] = torch.tensor(np.concatenate((selected["mode_X"][-2:], padding)), dtype=torch.int64)
-        # [2+predict_length]
-        tgt_dict["length"] = torch.tensor(np.concatenate(( np.log(selected["length_X"][-2:]), padding)) )
-        
+        x_dict["length"] = torch.log(torch.tensor(selected["length_X"], dtype=torch.float32))
+        # [sequence_len]
+        x_dict["weekday"] = torch.tensor(selected["weekday_X"], dtype=torch.int64)
 
-        if self.model_type == "deepmove":
-            # [1]
-            x_dict["history_count"] = torch.tensor(selected["history_count"])
-            
-        # [1]
+        # if self.model_type == "deepmove":
+        #     # [1]
+        #     x_dict["history_count"] = torch.tensor(selected["history_count"])
+
+        # [self.predict_length]
         y = torch.tensor(selected["loc_Y"], dtype=torch.long)
-        # [1]
-        mode = torch.tensor(selected["mode_Y"], dtype=torch.long)
-        
-        return x, tgt, y, mode, x_dict, tgt_dict
+        # [self.predict_length]
+        y_mode = torch.tensor(selected["mode_Y"], dtype=torch.long)
+
+        return x, y, x_dict, y_mode
 
     def generate_data(self):
 
-        # the valid location ids for unifying comparision
-        self.valid_ids = load_pk_file(os.path.join(self.root, f"valid_ids_{self.dataset}.pk"))
-
-        ori_data = pd.read_csv(os.path.join(self.root, f"dataset_{self.dataset}.csv"))
+        ori_data = pd.read_csv(os.path.join(self.root, f"dataSet_{self.dataset}.csv"))
         ori_data.sort_values(by=["user_id", "start_day", "start_min"], inplace=True)
+
+        # encoder user
+        enc = OrdinalEncoder(dtype=np.int64)
+        ori_data["user_id"] = enc.fit_transform(ori_data["user_id"].values.reshape(-1, 1)) + 1
 
         # truncate too long duration, >2days to 2 days
         ori_data.loc[ori_data["duration"] > 60 * 24 * 2 - 1, "duration"] = 60 * 24 * 2 - 1
@@ -165,7 +153,7 @@ class gc_dataset(torch.utils.data.Dataset):
 
         save_path = os.path.join(
             self.data_dir,
-            f"{self.model_type}_{self.previous_day}_{self.predict_length}_{dataset_type}.pk",
+            f"{self.model_type}_{self.previous_day}_{dataset_type}.pk",
         )
         save_pk_file(save_path, valid_records)
 
@@ -191,14 +179,6 @@ class gc_dataset(torch.utils.data.Dataset):
             hist = df.iloc[:index]
             hist = hist.loc[(hist["start_day"] >= (row["start_day"] - self.previous_day))]
 
-            predict = df.iloc[index : index + self.predict_length]
-
-            # print(predict)
-            # print(row)
-
-            if len(predict) != self.predict_length:
-                continue
-
             # should be in the valid user ids
             if len(hist) < 3:
                 continue
@@ -216,11 +196,12 @@ class gc_dataset(torch.utils.data.Dataset):
             data_dict["start_min_X"] = hist["start_min"].values
             data_dict["mode_X"] = hist["mode"].values
             data_dict["length_X"] = hist["length_m"].values
+            data_dict["weekday_X"] = hist["weekday"].values
 
             # the next location is the Y
-            data_dict["loc_Y"] = predict["location_id"].astype(int).values
+            data_dict["loc_Y"] = int(row["location_id"])
             # the next mode is the Y
-            data_dict["mode_Y"] = predict["mode"].astype(int).values
+            data_dict["mode_Y"] = int(row["mode"])
             # print(data_dict["loc_Y"])
 
             data_single_user.append(data_dict)
@@ -268,103 +249,35 @@ def load_pk_file(save_path):
 
 def collate_fn(batch):
     """function to collate data samples into batch tensors."""
-    # x, tgt, y, mode, x_dict, tgt_dict
-    x_batch, tgt_batch, y_batch, mode_batch = [], [], [], []
+    x_batch, y_batch, y_mode_batch = [], [], []
 
-    # get one sample batch
     x_dict_batch = {"len": []}
-    tgt_dict_batch = {}
-    for key in batch[0][-1]:
+    for key in batch[0][-2]:
         x_dict_batch[key] = []
-        tgt_dict_batch[key] = []
 
-    for x_sample, tgt_sample, y_sample, mode_sample, x_dict, tgt_dict in batch:
+    for x_sample, y_sample, x_dict_sample, y_mode_sample in batch:
         x_batch.append(x_sample)
-        tgt_batch.append(tgt_sample)
         y_batch.append(y_sample)
-        mode_batch.append(mode_sample)
+        y_mode_batch.append(y_mode_sample)
 
+        # x_dict_sample
         x_dict_batch["len"].append(len(x_sample))
-        for key in x_dict:
-            x_dict_batch[key].append(x_dict[key])
-            
-        for key in tgt_dict:
-            tgt_dict_batch[key].append(tgt_dict[key])
+        for key in x_dict_sample:
+            x_dict_batch[key].append(x_dict_sample[key])
 
     x_batch = pad_sequence(x_batch)
-    tgt_batch = pad_sequence(tgt_batch)
-    y_batch = pad_sequence(y_batch)
-    mode_batch = pad_sequence(mode_batch)
+    y_batch = torch.tensor(y_batch, dtype=torch.int64)
+    y_mode_batch = torch.tensor(y_mode_batch, dtype=torch.int64)
 
+    # x_dict_batch
     x_dict_batch["user"] = torch.tensor(x_dict_batch["user"], dtype=torch.int64)
     x_dict_batch["len"] = torch.tensor(x_dict_batch["len"], dtype=torch.int64)
     for key in x_dict_batch:
         if key in ["user", "len", "history_count"]:
             continue
         x_dict_batch[key] = pad_sequence(x_dict_batch[key])
-    tgt_dict_batch["user"] = torch.tensor(tgt_dict_batch["user"], dtype=torch.int64)
-    for key in tgt_dict_batch:
-        if key in ["user", "len", "history_count"]:
-            continue
-        tgt_dict_batch[key] = pad_sequence(tgt_dict_batch[key])
 
-    return x_batch, tgt_batch, y_batch, mode_batch, x_dict_batch, tgt_dict_batch
-
-
-def deepmove_collate_fn(batch):
-    """function to collate data samples into batch tensors."""
-    history_batch, curr_batch, tgt_batch = [], [], []
-
-    # the context
-    history_dict_batch = {
-        "user": [],
-        "weekday": [],
-        "time": [],
-        "len": [],
-    }
-    curr_dict_batch = {
-        "user": [],
-        "weekday": [],
-        "time": [],
-        "len": [],
-    }
-
-    for src_sample, tgt_sample, return_dict in batch:
-        history_len = return_dict["history_count"]
-
-        history_batch.append(src_sample[:history_len])
-        curr_batch.append(src_sample[history_len:])
-        tgt_batch.append(tgt_sample)
-
-        history_dict_batch["len"].append(history_len)
-        history_dict_batch["user"].append(return_dict["user"])
-        history_dict_batch["weekday"].append(return_dict["weekday"][:history_len])
-        history_dict_batch["time"].append(return_dict["time"][:history_len])
-
-        curr_dict_batch["len"].append(len(src_sample[history_len:]))
-        curr_dict_batch["user"].append(return_dict["user"])
-        curr_dict_batch["weekday"].append(return_dict["weekday"][history_len:])
-        curr_dict_batch["time"].append(return_dict["time"][history_len:])
-
-    history_batch = pad_sequence(history_batch)
-    curr_batch = pad_sequence(curr_batch)
-    tgt_batch = torch.tensor(tgt_batch, dtype=torch.int64)
-
-    history_dict_batch["len"] = torch.tensor(history_dict_batch["len"], dtype=torch.int64)
-    history_dict_batch["user"] = torch.tensor(history_dict_batch["user"], dtype=torch.int64)
-    history_dict_batch["weekday"] = pad_sequence(history_dict_batch["weekday"])
-    history_dict_batch["time"] = pad_sequence(history_dict_batch["time"])
-
-    curr_dict_batch["len"] = torch.tensor(curr_dict_batch["len"], dtype=torch.int64)
-    curr_dict_batch["user"] = torch.tensor(curr_dict_batch["user"], dtype=torch.int64)
-    curr_dict_batch["weekday"] = pad_sequence(curr_dict_batch["weekday"])
-    curr_dict_batch["time"] = pad_sequence(curr_dict_batch["time"])
-
-    return (
-        (history_batch, curr_batch),
-        tgt_batch,
-        (history_dict_batch, curr_dict_batch),
-    )
+    return x_batch, y_batch, x_dict_batch, y_mode_batch
 
 
 def test_dataloader(train_loader):
@@ -373,13 +286,16 @@ def test_dataloader(train_loader):
 
     ave_shape = 0
     y_shape = 0
-    tgt_shape = 0
-    for batch_idx, (x, tgt, Y, mode, x_dict, tgt_dict) in tqdm(enumerate(train_loader)):
+    y_mode_shape = 0
+    user_ls = []
+    for batch_idx, (x, y, x_dict, y_mode) in tqdm(enumerate(train_loader)):
         # print("batch_idx ", batch_idx)
         # print(inputs.shape)
         ave_shape += x.shape[0]
-        tgt_shape += tgt.shape[0]
-        y_shape += Y.shape[0]
+        y_shape += y.shape[0]
+        y_mode_shape += y_mode.shape[0]
+
+        user_ls.extend(x_dict["user"])
         # print(inputs)
         # print(mode)
         # print(dict)
@@ -392,8 +308,9 @@ def test_dataloader(train_loader):
         # print(dict)
         # if batch_idx > 10:
         #     break
+    # print(np.max(user_ls), np.min(user_ls))
     print(ave_shape / len(train_loader))
-    print(tgt_shape / len(train_loader))
+    print(y_mode_shape / len(train_loader))
     print(y_shape / len(train_loader))
 
 
@@ -405,21 +322,18 @@ if __name__ == "__main__":
         data_type="train",
         dataset="gc",
         previous_day=7,
-        predict_length=5,
     )
     dataset_val = gc_dataset(
         source_root,
         data_type="validation",
         dataset="gc",
         previous_day=7,
-        predict_length=5,
     )
     dataset_test = gc_dataset(
         source_root,
         data_type="test",
         dataset="gc",
         previous_day=7,
-        predict_length=5,
     )
 
     kwds = {"shuffle": False, "num_workers": 0, "batch_size": 2}

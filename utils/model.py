@@ -24,46 +24,47 @@ class PositionalEncoding(nn.Module):
 
 
 class AllEmbedding(nn.Module):
-    def __init__(self, config, total_loc_num) -> None:
+    def __init__(self, config) -> None:
         super(AllEmbedding, self).__init__()
         # emberdding layers
         # location embedding
-        self.emb_loc = nn.Embedding(total_loc_num, config.loc_emb_size)
+        self.emb_loc = nn.Embedding(config.total_loc_num, config.loc_emb_size)
+
+        self.if_include_mode = config.if_embed_mode
+        if self.if_include_mode:
+            self.emb_mode = nn.Embedding(8, config.loc_emb_size)
 
         # time is in minutes, possible time for each day is 60 * 24 // 30
         self.if_include_time = config.if_embed_time
         if self.if_include_time:
-            self.emb_time = nn.Embedding(60 * 24 // 30, config.time_emb_size)
+            self.emb_hour = nn.Embedding(24, config.loc_emb_size)
+            self.emb_min = nn.Embedding(4, config.loc_emb_size)
 
-        self.if_include_mode = config.if_embed_mode
-        if self.if_include_mode:
-            self.emb_mode = nn.Embedding(8, config.mode_emb_size)
-
-    def forward(self, src, dict, device) -> Tensor:
+    def forward(self, src, context_dict) -> Tensor:
         # embedding
         emb = self.emb_loc(src)
-
         if self.if_include_time:
-            time = dict["time"].to(device)
-            emb = torch.cat([emb, self.emb_time(time)], -1)
+            hour = torch.div(context_dict["time"], 4, rounding_mode="floor")
+            minutes = context_dict["time"] % 4
+            emb = emb + self.emb_hour(hour) + self.emb_min(minutes)
+
         if self.if_include_mode:
-            mode = dict["mode"].to(device)
-            emb = torch.cat([emb, self.emb_mode(mode)], -1)
+            emb = emb + self.emb_mode(context_dict["mode"])
 
         return emb
 
 
 class Classifier(nn.Module):
-    def __init__(self, config, total_loc_num) -> None:
+    def __init__(self, config) -> None:
         super(Classifier, self).__init__()
-        self.Embedding = AllEmbedding(config, total_loc_num)
+        self.Embedding = AllEmbedding(config)
 
         # the input size to each layer
         self.d_input = config.loc_emb_size
-        if config.if_embed_time:
-            self.d_input = self.d_input + config.time_emb_size
-        if config.if_embed_mode:
-            self.d_input = self.d_input + config.mode_emb_size
+        # if config.if_embed_mode:
+        #     self.d_input = self.d_input + config.mode_emb_size
+        # if config.if_embed_time:
+        #     self.d_input = self.d_input + config.time_emb_size
 
         self.model_type = config.networkName
 
@@ -96,38 +97,35 @@ class Classifier(nn.Module):
         else:
             fc_dim = self.out_dim
 
+        # the residual
         self.fc_1 = nn.Linear(fc_dim, fc_dim)
-        self.fc_loc = nn.Linear(fc_dim, total_loc_num)
+        self.norm_1 = nn.BatchNorm1d(fc_dim)
+        self.fc_loc = nn.Linear(fc_dim, config.total_loc_num)
 
         self.if_loss_mode = config.if_loss_mode
         if self.if_loss_mode:
             self.fc_mode = nn.Linear(fc_dim, 8)
 
         self.emb_dropout = nn.Dropout(p=0.1)
-        self.fc_dropout = nn.Dropout(p=0.5)
+        self.fc_dropout = nn.Dropout(p=config.fc_dropout)
 
         # init parameter
         self._init_weights()
         if self.model_type == "rnn":
             self._init_weights_rnn()
 
-    def forward(self, src, tgt, src_context_dict, tgt_context_dict,  predict_length, device) -> Tensor:
-        src_emb = self.Embedding(src, src_context_dict, device)
-        tgt_emb = self.Embedding(tgt, tgt_context_dict, device)
-        
-        seq_len = src_context_dict["len"].to(device)
+    def forward(self, src, context_dict, device) -> Tensor:
+        emb = self.Embedding(src, context_dict)
+        seq_len = context_dict["len"]
 
         # model
         if self.model_type == "transformer":
             # positional encoding, dropout performed inside
-            src_emb = self.pos_encoder(src_emb * math.sqrt(self.d_input))
-            tgt_emb = self.pos_encoder(tgt_emb * math.sqrt(self.d_input))
-            # mask
-            src_mask = torch.zeros((src.shape[0], src.shape[0])).type(torch.bool).to(device)
+            emb = self.pos_encoder(emb * math.sqrt(self.d_input))
+
+            src_mask = self._generate_square_subsequent_mask(src.shape[0]).to(device)
             src_padding_mask = (src == 0).transpose(0, 1).to(device)
-            tgt_mask = self._generate_square_subsequent_mask(tgt.shape[0]).to(device)
-            
-            out = self.model(src=src_emb, tgt=tgt_emb, src_mask= src_mask, src_key_padding_mask=src_padding_mask, tgt_mask=tgt_mask)
+            out = self.model(emb, src_mask, src_padding_mask)
 
         elif self.model_type == "rnn":
 
@@ -148,22 +146,19 @@ class Classifier(nn.Module):
                 out = out + attn_output
                 out = self.norm(out)
         # only take the last timestep
-        # out = out.gather(
-        #     0,
-        #     seq_len.view([1, -1, 1]).expand([1, out.shape[1], out.shape[-1]]) - 1,
-        # ).squeeze(0)
-        out = out[-predict_length:]
+        out = out.gather(
+            0,
+            seq_len.view([1, -1, 1]).expand([1, out.shape[1], out.shape[-1]]) - 1,
+        ).squeeze(0)
 
         # with fc output
         if self.if_embed_user:
-            user = src_context_dict["user"].to(device)
-            emb_user = self.emb_user(user).unsqueeze(0).expand(out.shape[0], -1, -1)
-            
+            emb_user = self.emb_user(context_dict["user"])
             out = torch.cat([out, emb_user], -1)
         out = self.emb_dropout(out)
 
         # residual
-        out = out + self.fc_dropout(F.relu(self.fc_1(out)))
+        out = self.norm_1(out + self.fc_dropout(F.relu(self.fc_1(out))))
 
         if self.if_loss_mode:
             return self.fc_loc(out), self.fc_mode(out)
@@ -213,21 +208,10 @@ class Transformer(nn.Module):
             num_layers=config.num_encoder_layers,
             norm=encoder_norm,
         )
-        
-        decoder_layer = torch.nn.TransformerDecoderLayer(
-            d_model=d_input, 
-            nhead=config.nhead, 
-            activation="gelu",
-            dim_feedforward=config.dim_feedforward,
-            dropout=config.dropout)
-        decoder_norm = torch.nn.LayerNorm(d_input)
-        self.decoder = torch.nn.TransformerDecoder(decoder_layer=decoder_layer, num_layers=config.num_encoder_layers, norm=decoder_norm)
 
-
-    def forward(self, src, tgt, src_mask, tgt_mask, src_key_padding_mask) -> Tensor:
+    def forward(self, input, src_mask, src_padding_mask) -> Tensor:
         """Forward pass of the network."""
-        memory = self.encoder(src, mask=src_mask, src_key_padding_mask=src_key_padding_mask)
-        return self.decoder(tgt, memory, tgt_mask=tgt_mask)
+        return self.encoder(input, mask=src_mask, src_key_padding_mask=src_padding_mask)
 
 
 class RNN_Classifier(nn.Module):

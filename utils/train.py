@@ -12,6 +12,11 @@ from transformers import AdamW
 from transformers import get_linear_schedule_with_warmup
 
 from utils.earlystopping import EarlyStopping
+import math, random
+
+
+def flip_from_probability(p):
+    return True if random.random() < p else False
 
 
 def get_performance_dict(return_dict):
@@ -33,16 +38,18 @@ def get_performance_dict(return_dict):
     return perf
 
 
-def send_to_device(x, tgt, Y, mode, device, config):
+def send_to_device(inputs, device, config):
+    x, y, x_dict, y_mode = inputs
     if config.networkName == "deepmove":
         x = (x[0].to(device), x[1].to(device))
     else:
         x = x.to(device)
-    tgt = tgt.to(device)
-    Y = Y.to(device)
-    mode = mode.to(device)
+    y = y.to(device)
+    y_mode = y_mode.to(device)
 
-    return x, tgt, Y, mode
+    for key in x_dict:
+        x_dict[key] = x_dict[key].to(device)
+    return x, y, x_dict, y_mode
 
 
 def calculate_correct_total_prediction(logits, true_y):
@@ -212,28 +219,25 @@ def train(
     n_batches = len(train_loader)
 
     CEL = torch.nn.CrossEntropyLoss(reduction="mean", ignore_index=0)
-
+    # k = 5
     # define start time
     start_time = time.time()
     optim.zero_grad()
-    for i, (x, tgt, Y, mode, x_dict, tgt_dict) in enumerate(train_loader):
+    for i, inputs in enumerate(train_loader):
         globaliter += 1
 
-        x, tgt, Y, mode = send_to_device(x, tgt, Y, mode, device, config)
+        x, y, x_dict, y_mode = send_to_device(inputs, device, config)
 
-        optim.zero_grad()
-        # loss calculation
         if config.if_loss_mode:
-            logits_loc, logits_mode = model(x, tgt, x_dict, tgt_dict, config.predict_length, device)
-
-            loss_size_loc = CEL(logits_loc.view(-1, logits_loc.shape[-1]), Y.reshape(-1))
-            loss_size_mode = CEL(logits_mode.view(-1, logits_mode.shape[-1]), mode.reshape(-1))
+            logits_loc, logits_mode = model(x, x_dict, device)
+            loss_size_loc = CEL(logits_loc, y.reshape(-1))
+            loss_size_mode = CEL(logits_mode, y_mode.reshape(-1))
 
             loss_size = loss_size_loc + loss_size_mode
         else:
-            logits_loc =model(x, tgt, x_dict, tgt_dict, config.predict_length, device)
-            
-            loss_size = CEL(logits_loc.view(-1, logits_loc.shape[-1]), Y.reshape(-1))
+            logits_loc = model(x, x_dict, device)
+
+            loss_size = CEL(logits_loc, y.reshape(-1))
 
         optim.zero_grad()
         loss_size.backward()
@@ -246,7 +250,7 @@ def train(
         # Print statistics
         running_loss += loss_size.item()
 
-        result_arr += calculate_correct_total_prediction(logits_loc.view(-1, logits_loc.shape[-1]), Y.view(-1))
+        result_arr += calculate_correct_total_prediction(logits_loc, y)
 
         if (config.verbose) and ((i + 1) % config["print_step"] == 0):
             print(
@@ -262,16 +266,6 @@ def train(
                 end="",
                 flush=True,
             )
-            # print(
-            #     "Epoch {}, {:.1f}%\t loss: {:.3f} took: {:.2f}s \r".format(
-            #         epoch + 1,
-            #         100 * (i + 1) / n_batches,
-            #         running_loss / config["print_step"],
-            #         time.time() - start_time,
-            #     ),
-            #     end="",
-            #     flush=True,
-            # )
 
             # Reset running loss and time
             running_loss = 0.0
@@ -293,25 +287,24 @@ def validate(config, model, data_loader, device):
     # change to validation mode
     model.eval()
     with torch.no_grad():
-        for val_x, tgt, val_Y, mode, x_dict, tgt_dict in data_loader:
-            val_x, tgt, val_Y, mode = send_to_device(val_x, tgt, val_Y, mode, device, config)
+        for inputs in data_loader:
 
-            # loss calculation
+            x, y, x_dict, y_mode = send_to_device(inputs, device, config)
+
             if config.if_loss_mode:
-                logits_loc, logits_mode = model(val_x, tgt, x_dict, tgt_dict, config.predict_length, device)
+                logits_loc, logits_mode = model(x, x_dict, device)
+                loss_size_loc = CEL(logits_loc, y.reshape(-1))
+                loss_size_mode = CEL(logits_mode, y_mode.reshape(-1))
 
-                loss_size_loc = CEL(logits_loc.view(-1, logits_loc.shape[-1]), val_Y.reshape(-1))
-                loss_size_mode = CEL(logits_mode.view(-1, logits_mode.shape[-1]), mode.reshape(-1))
                 loss_size = loss_size_loc + loss_size_mode
             else:
-                logits_loc = model(val_x, tgt, x_dict, tgt_dict, config.predict_length, device)
-            
-                loss_size = CEL(logits_loc.view(-1, logits_loc.shape[-1]), val_Y.reshape(-1))
+                logits_loc = model(x, x_dict, device)
+
+                loss_size = CEL(logits_loc, y.reshape(-1))
 
             total_val_loss += loss_size.item()
 
-            result_arr += calculate_correct_total_prediction(logits_loc.view(-1, logits_loc.shape[-1]), val_Y.view(-1))
-
+            result_arr += calculate_correct_total_prediction(logits_loc, y.view(-1))
 
     val_loss = total_val_loss / len(data_loader)
     result_arr[4] = result_arr[4] / len(data_loader)
@@ -325,12 +318,6 @@ def validate(config, model, data_loader, device):
                 100 * result_arr[5] / result_arr[-1],
             ),
         )
-        # print(
-        #     "Validation loss = {:.2f}".format(
-        #         val_loss,
-        #     ),
-        # )
-        
 
     return {
         "val_loss": val_loss,
@@ -355,26 +342,33 @@ def test(config, model, data_loader, device):
     # change to validation mode
     model.eval()
     with torch.no_grad():
-           
-        for x, tgt, Y, mode, x_dict, tgt_dict in data_loader:
 
-            x, tgt, Y, mode = send_to_device(x, tgt, Y, mode, device, config)
+        for inputs in data_loader:
+            x, y, x_dict, _ = send_to_device(inputs, device, config)
 
             if config.if_loss_mode:
-                logits_loc, _= model(x, tgt, x_dict, tgt_dict,config.predict_length, device)
+                logits_loc, _ = model(x, x_dict, device)
             else:
-                logits_loc= model(x, tgt, x_dict, tgt_dict, config.predict_length,device)
+                logits_loc = model(x, x_dict, device)
 
+            # we get the per user accuracy
             if config.networkName != "deepmove":
                 user_arr = x_dict["user"].cpu().detach().numpy()
                 unique = np.unique(user_arr)
                 for user in unique:
                     index = np.nonzero(user_arr == user)[0]
 
-                    result_arr_user[user] += calculate_correct_total_prediction(logits_loc[:, index, :].view(-1, logits_loc.shape[-1]), Y[:, index].view(-1))
+                    result_arr_user[user] += calculate_correct_total_prediction(logits_loc[index, :], y[index])
                     count_user[user] += 1
 
-            result_arr += calculate_correct_total_prediction(logits_loc.view(-1, logits_loc.shape[-1]), Y.view(-1))
+            # prediction = torch.topk(logits_loc, k=1, dim=-1).indices
+            # print(prediction.view(-1))
+            # print(Y.view(-1))
+            # top_k = torch.eq(Y.view(-1)[:, None], prediction).any(dim=1).sum().cpu().numpy()
+            # print(top_k)
+            # print(top_k / 10)
+
+            result_arr += calculate_correct_total_prediction(logits_loc, y.view(-1))
 
     # f1 score
     if config.networkName != "deepmove":

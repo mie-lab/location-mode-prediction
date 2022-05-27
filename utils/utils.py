@@ -8,7 +8,7 @@ import json
 from datetime import datetime
 
 from utils.train import trainNet, test, get_performance_dict
-from utils.dataloader import gc_dataset, collate_fn, deepmove_collate_fn
+from utils.dataloader import gc_dataset, collate_fn
 from utils.model import Classifier
 from utils.Deepmove import Deepmove
 
@@ -89,7 +89,7 @@ def get_models(config, device):
     if config.networkName == "deepmove":
         model = Deepmove(config=config).to(device)
     else:
-        model = Classifier(config=config, total_loc_num=config.total_loc_num).to(device)
+        model = Classifier(config=config).to(device)
     total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
     print("Total number of trainable parameters: ", total_params)
@@ -110,7 +110,7 @@ def get_dataloaders(config):
         "batch_size": config["batch_size"],
     }
     kwds_test = {
-        "shuffle": False,
+        "shuffle": True,
         "num_workers": 0,
         "batch_size": config["batch_size"],
     }
@@ -121,7 +121,6 @@ def get_dataloaders(config):
         model_type=config.networkName,
         previous_day=config.previous_day,
         dataset=config.dataset,
-        predict_length=config.predict_length,
     )
     dataset_val = gc_dataset(
         config.source_root,
@@ -129,7 +128,6 @@ def get_dataloaders(config):
         model_type=config.networkName,
         previous_day=config.previous_day,
         dataset=config.dataset,
-        predict_length=config.predict_length,
     )
     dataset_test = gc_dataset(
         config.source_root,
@@ -137,13 +135,12 @@ def get_dataloaders(config):
         model_type=config.networkName,
         previous_day=config.previous_day,
         dataset=config.dataset,
-        predict_length=config.predict_length,
     )
 
-    if config.networkName == "deepmove":
-        fn = deepmove_collate_fn
-    else:
-        fn = collate_fn
+    # if config.networkName == "deepmove":
+    #     fn = deepmove_collate_fn
+    # else:
+    fn = collate_fn
 
     train_loader = torch.utils.data.DataLoader(dataset_train, collate_fn=fn, **kwds_train)
     val_loader = torch.utils.data.DataLoader(dataset_val, collate_fn=fn, **kwds_val)
