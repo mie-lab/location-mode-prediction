@@ -1,3 +1,4 @@
+from re import X
 import torch
 import numpy as np
 
@@ -9,7 +10,7 @@ class baselines:
         self.test_loader = test_loader
 
         self.persistent_forcast()
-        # self.frequent_forcast()
+        self.frequent_forcast()
         self.markov_forcast_local()
 
     def persistent_forcast(self):
@@ -17,27 +18,27 @@ class baselines:
         correct = 0
         total = 0
 
-        for _, (_, _, target, dict) in enumerate(self.train_loader):
-            data = dict["mode"]
-            correct += (data[-1] == target).sum().numpy()
+        for _, (x, y, _, _) in enumerate(self.train_loader):
+            data = x
+            correct += (data[-1] == y).sum().numpy()
             total += 1
 
         print("Persistent forcast train accuracy = {:.2f}".format(100 * correct / total))
 
         correct = 0
         total = 0
-        for _, (_, _, target, dict) in enumerate(self.val_loader):
-            data = dict["mode"]
-            correct += (data[-1] == target).sum().numpy()
+        for _, (x, y, _, _) in enumerate(self.val_loader):
+            data = x
+            correct += (data[-1] == y).sum().numpy()
             total += 1
 
         print("Persistent forcast validation accuracy = {:.2f}".format(100 * correct / total))
 
         correct = 0
         total = 0
-        for _, (_, _, target, dict) in enumerate(self.test_loader):
-            data = dict["mode"]
-            correct += (data[-1] == target).sum().numpy()
+        for _, (x, y, _, _) in enumerate(self.test_loader):
+            data = x
+            correct += (data[-1] == y).sum().numpy()
             total += 1
 
         print("Persistent forcast test accuracy = {:.2f}".format(100 * correct / total))
@@ -46,36 +47,36 @@ class baselines:
         """Predict the most frequent value as the target."""
         correct = 0
         total = 0
-        for _, (_, _, target, dict) in enumerate(self.train_loader):
-            data = dict["mode"]
+        for _, (x, y, _, _) in enumerate(self.train_loader):
+            data = x
             output, counts = torch.unique(data, sorted=False, return_counts=True)
             predict = output[counts.argmax()]
 
-            correct += (predict == target).sum().numpy()
+            correct += (predict == y).sum().numpy()
             total += 1
 
         print("Frequent forcast train accuracy = {:.2f}".format(100 * correct / total))
 
         correct = 0
         total = 0
-        for _, (_, _, target, dict) in enumerate(self.val_loader):
-            data = dict["mode"]
+        for _, (x, y, _, _) in enumerate(self.val_loader):
+            data = x
             output, counts = torch.unique(data, sorted=False, return_counts=True)
             predict = output[counts.argmax()]
 
-            correct += (predict == target).sum().numpy()
+            correct += (predict == y).sum().numpy()
             total += 1
 
         print("Frequent forcast validation Accuracy = {:.2f}".format(100 * correct / total))
 
         correct = 0
         total = 0
-        for _, (_, _, target, dict) in enumerate(self.test_loader):
-            data = dict["mode"]
+        for _, (x, y, _, _) in enumerate(self.test_loader):
+            data = x
             output, counts = torch.unique(data, sorted=False, return_counts=True)
             predict = output[counts.argmax()]
 
-            correct += (predict == target).sum().numpy()
+            correct += (predict == y).sum().numpy()
             total += 1
 
         print("Frequent forcast test Accuracy = {:.2f}".format(100 * correct / total))
@@ -83,14 +84,14 @@ class baselines:
     def markov_forcast_self(self, loader):
         correct = 0
         total = 0
-        for _, (_, _, target, dict) in enumerate(loader):
-            data = dict["mode"]
+        for _, (x, y, _, _) in enumerate(loader):
+            data = x
             # most frequent
-            # output, counts = torch.unique(data, sorted=False, return_counts=True)
-            # most_frequent = output[counts.argmax()]
+            output, counts = torch.unique(data, sorted=False, return_counts=True)
+            most_frequent = output[counts.argmax()]
 
             # persistent
-            most_frequent = data[-1]
+            # most_frequent = data[-1]
 
             # markov matrix construction
             idx, inverse_indices = data.unique(return_inverse=True)
@@ -104,7 +105,7 @@ class baselines:
             else:
                 current_predict = most_frequent
 
-            correct += (current_predict == target).numpy()[0]
+            correct += (current_predict == y).numpy()[0]
             total += 1
 
         print("Accuracy = {:.2f}".format(100 * correct / total))

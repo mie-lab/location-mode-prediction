@@ -64,9 +64,9 @@ class gc_dataset(torch.utils.data.Dataset):
         # [sequence_len]
         x_dict["weekday"] = torch.tensor(selected["weekday_X"], dtype=torch.int64)
 
-        # if self.model_type == "deepmove":
-        #     # [1]
-        #     x_dict["history_count"] = torch.tensor(selected["history_count"])
+        if self.model_type == "deepmove":
+            # [1]
+            x_dict["history_count"] = torch.tensor(selected["history_count"])
 
         # [self.predict_length]
         y = torch.tensor(selected["loc_Y"], dtype=torch.long)
@@ -77,7 +77,7 @@ class gc_dataset(torch.utils.data.Dataset):
 
     def generate_data(self):
 
-        ori_data = pd.read_csv(os.path.join(self.root, f"dataSet_{self.dataset}.csv"))
+        ori_data = pd.read_csv(os.path.join(self.root, f"dataSet_{self.dataset}_pre.csv"))
         ori_data.sort_values(by=["user_id", "start_day", "start_min"], inplace=True)
 
         # encoder user
@@ -279,18 +279,94 @@ def collate_fn(batch):
 
     return x_batch, y_batch, x_dict_batch, y_mode_batch
 
+def deepmove_collate_fn(batch):
+    """function to collate data samples into batch tensors."""
+    # history_batch, curr_batch, tgt_batch = [], [], []
+    x_batch, hist_batch, y_batch, y_mode_batch = [], [], [], []
+
+    # the context
+    x_dict_batch = {"len": []}
+    for key in batch[0][-2]:
+        if key in ["history_count"]:
+            continue
+        x_dict_batch[key] = []
+    hist_dict_batch = {"len": []}
+    for key in batch[0][-2]:
+        if key in ["history_count"]:
+            continue
+        hist_dict_batch[key] = []
+
+    # x_sample, y_sample, x_dict_sample, y_mode_sample
+    for x_sample, y_sample, x_dict_sample, y_mode_sample in batch:
+        history_len = x_dict_sample["history_count"]
+
+        hist_batch.append(x_sample[:history_len])
+        x_batch.append(x_sample[history_len:])
+        y_batch.append(y_sample)
+        y_mode_batch.append(y_mode_sample)
+
+        # hist_dict_batch
+        hist_dict_batch["len"].append(history_len)
+        hist_dict_batch["user"].append(x_dict_sample["user"])
+        for key in x_dict_sample:
+            if key in ["user", "history_count"]:
+                continue
+            hist_dict_batch[key].append(x_dict_sample[key][:history_len])
+
+        # x_dict_batch
+        x_dict_batch["len"].append(len(x_sample[history_len:]))
+        x_dict_batch["user"].append(x_dict_sample["user"])
+        for key in x_dict_sample:
+            if key in ["user", "history_count"]:
+                continue
+            x_dict_batch[key].append(x_dict_sample[key][history_len:])
+
+    x_batch = pad_sequence(x_batch)
+    hist_batch = pad_sequence(hist_batch)
+    y_batch = torch.tensor(y_batch, dtype=torch.int64)
+    y_mode_batch = torch.tensor(y_mode_batch, dtype=torch.int64)
+    
+    # hist_dict_batch
+    hist_dict_batch["user"] = torch.tensor(hist_dict_batch["user"], dtype=torch.int64)
+    hist_dict_batch["len"] = torch.tensor(hist_dict_batch["len"], dtype=torch.int64)
+    for key in hist_dict_batch:
+        if key in ["user", "len"]:
+            continue
+        hist_dict_batch[key] = pad_sequence(hist_dict_batch[key])
+
+    # x_dict_batch
+    x_dict_batch["user"] = torch.tensor(x_dict_batch["user"], dtype=torch.int64)
+    x_dict_batch["len"] = torch.tensor(x_dict_batch["len"], dtype=torch.int64)
+    for key in x_dict_batch:
+        if key in ["user", "len"]:
+            continue
+        x_dict_batch[key] = pad_sequence(x_dict_batch[key])
+
+    return (
+        (hist_batch, x_batch),
+        y_batch,
+        (hist_dict_batch, x_dict_batch),
+        y_mode_batch
+    )
+
+
 
 def test_dataloader(train_loader):
 
     batch_size = train_loader.batch_size
 
     ave_shape = 0
+    hist_shape = 0
     y_shape = 0
     y_mode_shape = 0
     user_ls = []
     for batch_idx, (x, y, x_dict, y_mode) in tqdm(enumerate(train_loader)):
         # print("batch_idx ", batch_idx)
         # print(inputs.shape)
+        (hist, x) = x
+        (hist_dict, x_dict) = x_dict
+
+        hist_shape += hist.shape[0]
         ave_shape += x.shape[0]
         y_shape += y.shape[0]
         y_mode_shape += y_mode.shape[0]
@@ -309,6 +385,7 @@ def test_dataloader(train_loader):
         # if batch_idx > 10:
         #     break
     # print(np.max(user_ls), np.min(user_ls))
+    print(hist_shape / len(train_loader))
     print(ave_shape / len(train_loader))
     print(y_mode_shape / len(train_loader))
     print(y_shape / len(train_loader))
@@ -322,24 +399,27 @@ if __name__ == "__main__":
         data_type="train",
         dataset="gc",
         previous_day=7,
+        model_type="deepmove"
     )
     dataset_val = gc_dataset(
         source_root,
         data_type="validation",
         dataset="gc",
         previous_day=7,
+        model_type="deepmove"
     )
     dataset_test = gc_dataset(
         source_root,
         data_type="test",
         dataset="gc",
         previous_day=7,
+        model_type="deepmove"
     )
 
     kwds = {"shuffle": False, "num_workers": 0, "batch_size": 2}
-    train_loader = torch.utils.data.DataLoader(dataset_train, collate_fn=collate_fn, **kwds)
-    val_loader = torch.utils.data.DataLoader(dataset_val, collate_fn=collate_fn, **kwds)
-    test_loader = torch.utils.data.DataLoader(dataset_test, collate_fn=collate_fn, **kwds)
+    train_loader = torch.utils.data.DataLoader(dataset_train, collate_fn=deepmove_collate_fn, **kwds)
+    val_loader = torch.utils.data.DataLoader(dataset_val, collate_fn=deepmove_collate_fn, **kwds)
+    test_loader = torch.utils.data.DataLoader(dataset_test, collate_fn=deepmove_collate_fn, **kwds)
 
     test_dataloader(train_loader)
     test_dataloader(val_loader)

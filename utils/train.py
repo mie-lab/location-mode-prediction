@@ -8,11 +8,10 @@ from sklearn.metrics import f1_score
 
 import time
 
-from transformers import AdamW
 from transformers import get_linear_schedule_with_warmup
 
 from utils.earlystopping import EarlyStopping
-import math, random
+import random
 
 
 def flip_from_probability(p):
@@ -42,13 +41,18 @@ def send_to_device(inputs, device, config):
     x, y, x_dict, y_mode = inputs
     if config.networkName == "deepmove":
         x = (x[0].to(device), x[1].to(device))
+        
+        for key in x_dict[0]:
+            x_dict[0][key] = x_dict[0][key].to(device)
+        for key in x_dict[1]:
+            x_dict[1][key] = x_dict[1][key].to(device)
     else:
         x = x.to(device)
+        for key in x_dict:
+            x_dict[key] = x_dict[key].to(device)
     y = y.to(device)
     y_mode = y_mode.to(device)
 
-    for key in x_dict:
-        x_dict[key] = x_dict[key].to(device)
     return x, y, x_dict, y_mode
 
 

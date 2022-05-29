@@ -3,49 +3,43 @@ import numpy as np
 import torch
 from torch import Tensor
 
+from models.embed import AllEmbedding
+from models.RNNs import RNN_Classifier
+from models.model import FullyConnected
+
 import torch.nn.functional as F
 
 
 class Deepmove(nn.Module):
     def __init__(self, config) -> None:
         super(Deepmove, self).__init__()
-        self.emb_loc = nn.Embedding(config.total_loc_num, config.loc_emb_size)
-        self.emb_time = nn.Embedding(60 * 24 // 30, config.time_emb_size)
-
         # the input size to each layer
-        self.d_input = config.loc_emb_size + config.time_emb_size
+        self.d_input = config.loc_emb_size
+        self.out_dim = config.hidden_size*2
 
-        self.rnn_encoder = RNN_Classifier(config, self.d_input)
-        self.rnn_decoder = RNN_Classifier(config, self.d_input)
+        self.Embedding = AllEmbedding(self.d_input, config, if_pos_encoder=False, emb_info="time")
+        self.rnn_encoder = RNN_Classifier( self.d_input, config)
+        self.rnn_decoder = RNN_Classifier( self.d_input, config)
 
         self.attn = Attention()
 
-        self.emb_user = nn.Embedding(config.total_user_num, config.user_emb_size)
-        self.fc = nn.Linear(config.hidden_size * 2 + config.user_emb_size, config.total_loc_num)
-
-        self.dropout = nn.Dropout(p=0.1)
+        self.fc = FullyConnected(self.out_dim, config, if_residual_layer=True)
 
         # init parameter
-        self._init_weights()
         self._init_weights_rnn()
 
-    def forward(self, src, context_dict, device) -> Tensor:
+    def forward(self, src, src_dict, device) -> Tensor:
 
-        history, curr = src
-        history_context, context_dict = context_dict
+        hist, curr = src
+        hist_context, curr_context = src_dict
 
         # length of each batch
-        history_batch_len = history_context["len"].to(device)
-        curr_batch_len = context_dict["len"].to(device)
-
-        # time and user info
-        history_time = history_context["time"].to(device)
-        curr_time = context_dict["time"].to(device)
-        user = context_dict["user"].to(device)
+        history_batch_len = hist_context["len"]
+        curr_batch_len = curr_context["len"]
 
         # embedding
-        history_emb = torch.cat([self.emb_loc(history), self.emb_time(history_time)], -1)
-        curr_emb = torch.cat([self.emb_loc(curr), self.emb_time(curr_time)], -1)
+        history_emb = self.Embedding(hist, hist_context)
+        curr_emb = self.Embedding(curr, curr_context)
 
         # send to rnn
         hidden_history, _ = self.rnn_encoder(history_emb)
@@ -60,22 +54,8 @@ class Deepmove(nn.Module):
         _, context = self.attn(hidden_state, hidden_history, hidden_history, history_batch_len, device)
         out = torch.cat((hidden_state, context), 1)
 
-        # concat user embedding
-        emb_user = self.emb_user(user)
-        out = torch.cat([out, emb_user], -1)
-        out = self.dropout(out)
-
         # with fc output
-        return self.fc(out)
-
-    def _generate_square_subsequent_mask(self, sz):
-        return torch.triu(torch.full((sz, sz), float("-inf")), diagonal=1)
-
-    def _init_weights(self):
-        """Initiate parameters in the transformer model."""
-        for p in self.parameters():
-            if p.dim() > 1:
-                torch.nn.init.xavier_uniform_(p)
+        return self.fc(out, curr_context["user"])
 
     def _init_weights_rnn(self):
         """Reproduce Keras default initialization weights for consistency with Keras version."""
@@ -89,24 +69,6 @@ class Deepmove(nn.Module):
             nn.init.orthogonal_(t)
         for t in b:
             nn.init.constant_(t, 0)
-
-
-class RNN_Classifier(nn.Module):
-    """Baseline LSTM model."""
-
-    def __init__(self, config, d_input):
-        super(RNN_Classifier, self).__init__()
-        RNNS = ["LSTM", "GRU"]
-        self.bidirectional = False
-        assert config.rnn_type in RNNS, "Use one of the following: {}".format(str(RNNS))
-        rnn_cell = getattr(nn, config.rnn_type)  # fetch constructor from torch.nn, cleaner than if
-        self.rnn = rnn_cell(
-            d_input, hidden_size=config.hidden_size, num_layers=1, dropout=0.0, bidirectional=self.bidirectional
-        )
-
-    def forward(self, input, hidden=None):
-        """Forward pass of the network."""
-        return self.rnn(input, hidden)
 
 
 class Attention(nn.Module):

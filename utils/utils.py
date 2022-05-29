@@ -1,3 +1,4 @@
+from msilib.schema import Error
 import yaml
 import random, torch, os
 import numpy as np
@@ -8,9 +9,10 @@ import json
 from datetime import datetime
 
 from utils.train import trainNet, test, get_performance_dict
-from utils.dataloader import gc_dataset, collate_fn
-from utils.model import Classifier
-from utils.Deepmove import Deepmove
+from utils.dataloader import gc_dataset, collate_fn, deepmove_collate_fn
+from models.model import TransEncoder
+from models.RNNs import RNNs
+from models.Deepmove import Deepmove
 
 
 def load_config(path):
@@ -88,8 +90,12 @@ def get_models(config, device):
 
     if config.networkName == "deepmove":
         model = Deepmove(config=config).to(device)
+    elif config.networkName == "transformer":
+        model = TransEncoder(config=config).to(device)
+    elif config.networkName == "rnn":
+        model = RNNs(config=config).to(device)
     else:
-        model = Classifier(config=config).to(device)
+        raise Error
     total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 
     print("Total number of trainable parameters: ", total_params)
@@ -137,10 +143,10 @@ def get_dataloaders(config):
         dataset=config.dataset,
     )
 
-    # if config.networkName == "deepmove":
-    #     fn = deepmove_collate_fn
-    # else:
-    fn = collate_fn
+    if config.networkName == "deepmove":
+        fn = deepmove_collate_fn
+    else:
+        fn = collate_fn
 
     train_loader = torch.utils.data.DataLoader(dataset_train, collate_fn=fn, **kwds_train)
     val_loader = torch.utils.data.DataLoader(dataset_val, collate_fn=fn, **kwds_val)

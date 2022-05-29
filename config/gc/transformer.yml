@@ -1,9 +1,10 @@
 misc:
   dataset: gc
-  # 2204 known locations, ranging from 2 to 2205
-  # total_loc_num: 2877
+  # 9875 known locations, ranging from 2 to 9876
+  # 0 reserved for padding, 1 reserved for unknown
   total_loc_num: 9877
   # 93 users, ranging from 1 to 93
+  # 1 reserved for unknown
   total_user_num: 94
 
   # 
@@ -22,25 +23,26 @@ misc:
   
 
 embedding:
-  loc_emb_size: 32
+  # also size for time and mode
+  loc_emb_size: 64
+  # user_embedding added at the end 
   user_emb_size: 16
   
 
 model:
   networkName: transformer
-  # only for transformer
+  # tuned 
   num_encoder_layers: 4
   nhead: 8
   dim_feedforward: 256
   dropout: 0.1
-  fc_dropout: 0.2
+  fc_dropout: 0.1
 
 optimiser:
   optimizer: Adam
   max_epoch: 100
   lr: 0.001
   weight_decay: 0.000001
-  # lr: 0.01
   # for Adam
   beta1: 0.9
   beta2: 0.999
@@ -49,7 +51,7 @@ optimiser:
   # for warmup
   num_warmup_epochs: 2
   num_training_epochs: 50
-  # for decay
+  # for learning rate decay with early stop
   patience: 3
   lr_step_size: 1
   lr_gamma: 0.1
