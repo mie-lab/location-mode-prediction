@@ -10,7 +10,7 @@ class RNNs(nn.Module):
     def __init__(self, config):
         super(RNNs, self).__init__()
         self.attention = config.attention
-        self.d_input = config.loc_emb_size
+        self.d_input = config.base_emb_size
         self.out_dim = config.hidden_size
 
         if self.attention:

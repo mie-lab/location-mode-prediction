@@ -14,7 +14,7 @@ class Deepmove(nn.Module):
     def __init__(self, config) -> None:
         super(Deepmove, self).__init__()
         # the input size to each layer
-        self.d_input = config.loc_emb_size
+        self.d_input = config.base_emb_size
         self.out_dim = config.hidden_size*2
 
         self.Embedding = AllEmbedding(self.d_input, config, if_pos_encoder=False, emb_info="time")

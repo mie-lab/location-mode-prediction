@@ -9,10 +9,15 @@ import json
 from datetime import datetime
 
 from utils.train import trainNet, test, get_performance_dict
+from utils.train_mobTcast import trainNet_tcast, test_tcast
+from utils.train_mode import trainNet_mode, test_mode
 from utils.dataloader import gc_dataset, collate_fn, deepmove_collate_fn
+
 from models.model import TransEncoder
+from models.model_mode import TransEncoderMode
 from models.RNNs import RNNs
 from models.Deepmove import Deepmove
+from models.mobtcast import Mobtcast
 
 
 def load_config(path):
@@ -58,20 +63,35 @@ def get_trainedNets(config, model, train_loader, val_loader, device):
     with open(log_dir + "/conf.json", "w") as fp:
         json.dump(config, fp, indent=4, sort_keys=True)
 
-    best_model, performance = trainNet(config, model, train_loader, val_loader, device, log_dir=log_dir)
+    if config.networkName == "mobtcast":
+        best_model, performance = trainNet_tcast(config, model, train_loader, val_loader, device, log_dir=log_dir)
+    elif config.networkName == "transformer_mode":
+        best_model, performance = trainNet_mode(config, model, train_loader, val_loader, device, log_dir=log_dir)
+    else:
+        best_model, performance = trainNet(config, model, train_loader, val_loader, device, log_dir=log_dir)
     performance["type"] = "vali"
 
     return best_model, performance, log_dir
 
 
 def get_test_result(config, best_model, test_loader, device):
-
-    return_dict, result_arr_user = test(config, best_model, test_loader, device)
+    if config.networkName == "mobtcast":
+        return_dict, user_mode_dict = test_tcast(config, best_model, test_loader, device)
+    elif config.networkName == "transformer_mode":
+        return_dict, user_mode_dict = test_mode(config, best_model, test_loader, device)
+    else:
+        return_dict, user_mode_dict = test(config, best_model, test_loader, device)
     performance = get_performance_dict(return_dict)
     performance["type"] = "test"
 
-    result_user_df = pd.DataFrame(result_arr_user).T
-    result_user_df.columns = [
+    user_mode_ls = []
+    for user_id, mode_dict in user_mode_dict.items():
+        for mode_id, perf in mode_dict.items():
+            # ids and the count of records
+            user_mode_ls.append(np.append(perf, np.array([user_id, mode_id])))
+
+    result_df = pd.DataFrame(user_mode_ls)
+    result_df.columns = [
         "correct@1",
         "correct@3",
         "correct@5",
@@ -79,10 +99,11 @@ def get_test_result(config, best_model, test_loader, device):
         "f1",
         "rr",
         "total",
+        "user_id",
+        "mode_id"
     ]
-    result_user_df.index.name = "user"
 
-    return performance, result_user_df
+    return performance, result_df
 
 
 def get_models(config, device):
@@ -94,6 +115,11 @@ def get_models(config, device):
         model = TransEncoder(config=config).to(device)
     elif config.networkName == "rnn":
         model = RNNs(config=config).to(device)
+    elif config.networkName == "mobtcast":
+        model = Mobtcast(config=config).to(device)
+    elif config.networkName == "transformer_mode":
+        model = TransEncoderMode(config=config).to(device)
+    
     else:
         raise Error
     total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)

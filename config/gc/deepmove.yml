@@ -24,7 +24,7 @@ misc:
 
 embedding:
   # also size for time and mode
-  loc_emb_size: 64
+  base_emb_size: 64
   # user_embedding added at the end 
   user_emb_size: 16
 
@@ -32,7 +32,7 @@ model:
   networkName: deepmove
   # only for LSTM: LSTM or GRU
   attention: False
-  rnn_type: GRU
+  rnn_type: LSTM
   hidden_size: 64
   fc_dropout: 0.1
 

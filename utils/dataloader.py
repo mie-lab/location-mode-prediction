@@ -4,6 +4,7 @@ import geopandas as gpd
 from tqdm import tqdm
 from pathlib import Path
 import pickle as pickle
+from shapely import wkt
 
 from joblib import Parallel, delayed
 from sklearn.preprocessing import OrdinalEncoder
@@ -32,14 +33,13 @@ class gc_dataset(torch.utils.data.Dataset):
         self.data_dir = os.path.join(source_root, "temp")
         save_path = os.path.join(
             self.data_dir,
-            f"{self.model_type}_{previous_day}_{data_type}.pk",
+            f"{self.dataset}_{self.model_type}_{previous_day}_{data_type}.pk",
         )
 
         if Path(save_path).is_file():
             self.data = pickle.load(open(save_path, "rb"))
         else:
             self.data = self.generate_data()
-
         self.len = len(self.data)
 
     def __len__(self):
@@ -75,9 +75,18 @@ class gc_dataset(torch.utils.data.Dataset):
 
         return x, y, x_dict, y_mode
 
-    def generate_data(self):
 
-        ori_data = pd.read_csv(os.path.join(self.root, f"dataSet_{self.dataset}_pre.csv"))
+    def generate_data(self):
+        if self.model_type == "mobtcast":
+            loc_file = pd.read_csv(os.path.join(self.root, f"locations_{self.dataset}.csv"))
+
+            loc_file["center"] = loc_file["center"].apply(wkt.loads)
+            loc_file = gpd.GeoDataFrame(loc_file, crs="EPSG:4326", geometry="center")
+            loc_file["lng"] = loc_file.geometry.x
+            loc_file["lat"] = loc_file.geometry.y
+            loc_file.drop(columns=["center","user_id","extent"], inplace=True)
+
+        ori_data = pd.read_csv(os.path.join(self.root, f"dataSet_{self.dataset}.csv"))
         ori_data.sort_values(by=["user_id", "start_day", "start_min"], inplace=True)
 
         # encoder user
@@ -105,6 +114,15 @@ class gc_dataset(torch.utils.data.Dataset):
             train_data["location_id"].max(),
             train_data["location_id"].unique().shape[0],
         )
+        if self.model_type == "mobtcast":
+            loc_file["id"] = enc.transform(loc_file["id"].values.reshape(-1, 1)) + 2
+            
+            loc_file["lng"]=2*(loc_file["lng"]-loc_file["lng"].min())/(loc_file["lng"].max()-loc_file["lng"].min()) - 1
+            loc_file["lat"]=2*(loc_file["lat"]-loc_file["lat"].min())/(loc_file["lat"].max()-loc_file["lat"].min()) - 1
+            loc_file = loc_file.loc[loc_file["id"]!=1].sort_values(by="id")
+            loc_file = loc_file[["lng", "lat"]].values.tolist()
+            save_path = os.path.join(self.data_dir, f"{self.dataset}_loc_{self.previous_day}.pk")
+            save_pk_file(save_path, loc_file)
 
         train_records = self.preProcessDatasets(train_data, "train")
         validation_records = self.preProcessDatasets(vali_data, "validation")
@@ -153,7 +171,7 @@ class gc_dataset(torch.utils.data.Dataset):
 
         save_path = os.path.join(
             self.data_dir,
-            f"{self.model_type}_{self.previous_day}_{dataset_type}.pk",
+            f"{self.dataset}_{self.model_type}_{self.previous_day}_{dataset_type}.pk",
         )
         save_pk_file(save_path, valid_records)
 
@@ -191,6 +209,8 @@ class gc_dataset(torch.utils.data.Dataset):
                 # the history sequence and the current sequence shall not be 0
                 if data_dict["history_count"] == 0 or data_dict["history_count"] == len(hist):
                     continue
+
+
             data_dict["X"] = hist["location_id"].values
             data_dict["user_X"] = hist["user_id"].values
             data_dict["start_min_X"] = hist["start_min"].values
@@ -397,29 +417,29 @@ if __name__ == "__main__":
     dataset_train = gc_dataset(
         source_root,
         data_type="train",
-        dataset="gc",
+        dataset="yumuv",
         previous_day=7,
-        model_type="deepmove"
+        model_type="mobtcast"
     )
     dataset_val = gc_dataset(
         source_root,
         data_type="validation",
-        dataset="gc",
+        dataset="yumuv",
         previous_day=7,
-        model_type="deepmove"
+        model_type="mobtcast"
     )
     dataset_test = gc_dataset(
         source_root,
         data_type="test",
-        dataset="gc",
+        dataset="yumuv",
         previous_day=7,
-        model_type="deepmove"
+        model_type="mobtcast"
     )
 
     kwds = {"shuffle": False, "num_workers": 0, "batch_size": 2}
-    train_loader = torch.utils.data.DataLoader(dataset_train, collate_fn=deepmove_collate_fn, **kwds)
-    val_loader = torch.utils.data.DataLoader(dataset_val, collate_fn=deepmove_collate_fn, **kwds)
-    test_loader = torch.utils.data.DataLoader(dataset_test, collate_fn=deepmove_collate_fn, **kwds)
+    train_loader = torch.utils.data.DataLoader(dataset_train, collate_fn=collate_fn, **kwds)
+    val_loader = torch.utils.data.DataLoader(dataset_val, collate_fn=collate_fn, **kwds)
+    test_loader = torch.utils.data.DataLoader(dataset_test, collate_fn=collate_fn, **kwds)
 
     test_dataloader(train_loader)
     test_dataloader(val_loader)

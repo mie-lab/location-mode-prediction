@@ -4,6 +4,11 @@ dblogin*
 trained_models/
 outputs/
 
+# 
+models/Deepmove.py
+models/mobtcast.py
+utils/train_mobTcast.py
+
 # Mac
 .DS_Store
 

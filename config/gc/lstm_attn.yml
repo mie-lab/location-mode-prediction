@@ -24,7 +24,7 @@ misc:
 
 embedding:
   # also size for time and mode
-  loc_emb_size: 64
+  base_emb_size: 64
   user_emb_size: 16
 
 model:

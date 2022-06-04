@@ -13,30 +13,14 @@ from utils.utils import (
     get_models,
 )
 
-setup_seed(42)
+setup_seed(41)
 
 
-if __name__ == "__main__":
-    config_path = "./config/gc/deepmove.yml"
-    # config_path = "./config/gc/lstm.yml"
-    # config_path = "./config/gc/lstm_attn.yml"
-    # config_path = "./config/gc/transformer.yml"
-
-    config = load_config(config_path)
-    config = edict(config)
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    # device = torch.device("cpu")
-
-    # fc_dropout_ls = [0.1, 0.2]
-    # if_embed_mode_ls = [True, False]
-    # if_loss_mode_ls = [True, False]
-
+def single_run(config, device):
     result_ls = []
 
-    for _ in range(5):
-        # print(config.fc_dropout, config.loc_emb_size, config.if_embed_mode, config.if_loss_mode)
-
+    for _ in range(1):
+        print(config.if_embed_mode, config.if_loss_mode)
         # get data
         train_loader, val_loader, test_loader = get_dataloaders(config)
 
@@ -46,21 +30,48 @@ if __name__ == "__main__":
         # train
         model, perf, log_dir = get_trainedNets(config, model, train_loader, val_loader, device)
         print(perf)
-        # perf["fc_dropout"] = config.fc_dropout
-        # perf["if_embed_mode"] = config.if_embed_mode
-        # perf["if_loss_mode"] = config.if_loss_mode
         result_ls.append(perf)
 
         # test
-        # model.load_state_dict(torch.load(r"D:\Code\NPP_mode\outputs\gc_transformer_1653486168\checkpoint.pt"))
-        perf, result_user_df = get_test_result(config, model, test_loader, device)
-        result_user_df.to_csv(log_dir + "/test_user.csv") 
+        perf, test_df = get_test_result(config, model, test_loader, device)
+        test_df.to_csv(log_dir + "/user_mode_detail.csv") 
 
         print(perf)
-        # perf["fc_dropout"] = config.fc_dropout
-        # perf["if_embed_mode"] = config.if_embed_mode
-        # perf["if_loss_mode"] = config.if_loss_mode
         result_ls.append(perf)
+
+    return result_ls
+
+if __name__ == "__main__":
+    # deepmove
+    # config_path = "./config/gc/deepmove.yml"
+    # config_path = "./config/yumuv/deepmove.yml"
+
+    # config_path = "./config/gc/lstm.yml"
+    # config_path = "./config/yumuv/lstm.yml"
+
+    # config_path = "./config/gc/lstm_attn.yml"
+    # config_path = "./config/yumuv/lstm_attn.yml"
+
+    config_path = "./config/gc/transformer.yml"
+    # config_path = "./config/yumuv/transformer.yml"
+
+    # config_path = "./config/gc/MobTCast.yml"
+    # config_path = "./config/yumuv/MobTCast.yml"
+
+    # config_path = "./config/gc/transformer_mode.yml"
+    # config_path = "./config/yumuv/transformer_mode.yml"
+
+    config = load_config(config_path)
+    config = edict(config)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    # device = torch.device("cpu")
+
+    result_ls = []
+
+
+    result_ls.extend(single_run(config, device))
+
 
     result_df = pd.DataFrame(result_ls)
     print(result_df)

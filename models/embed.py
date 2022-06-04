@@ -57,12 +57,19 @@ class TemporalEmbedding(nn.Module):
 
 
 class AllEmbedding(nn.Module):
-    def __init__(self, d_input, config, if_pos_encoder=True, emb_info="all") -> None:
+    def __init__(self, d_input, config, if_pos_encoder=True, emb_info="all", emb_type="add") -> None:
         super(AllEmbedding, self).__init__()
         # emberdding layers
         self.d_input = d_input
+        self.emb_type = emb_type
+
         # location embedding
-        self.emb_loc = nn.Embedding(config.total_loc_num, d_input)
+        self.if_include_loc = config.if_embed_loc
+        if self.if_include_loc:
+            if self.emb_type == "add":
+                self.emb_loc = nn.Embedding(config.total_loc_num, d_input)
+            else:
+                self.emb_loc = nn.Embedding(config.total_loc_num, d_input - config.time_emb_size)
 
         self.if_include_mode = config.if_embed_mode
         if self.if_include_mode:
@@ -71,7 +78,10 @@ class AllEmbedding(nn.Module):
         # time is in minutes, possible time for each day is 60 * 24 // 30
         self.if_include_time = config.if_embed_time
         if self.if_include_time:
-            self.temporal_embedding = TemporalEmbedding(d_input, emb_info)
+            if self.emb_type == "add":
+                self.temporal_embedding = TemporalEmbedding(d_input, emb_info)
+            else:
+                self.temporal_embedding = TemporalEmbedding(config.time_emb_size, emb_info)
 
         self.if_pos_encoder = if_pos_encoder
         if self.if_pos_encoder:
@@ -79,14 +89,26 @@ class AllEmbedding(nn.Module):
         else:
             self.dropout = nn.Dropout(0.1)
 
-    def forward(self, src, context_dict) -> Tensor:
-        # embedding
-        emb = self.emb_loc(src)
-        if self.if_include_time:
-            emb = emb + self.temporal_embedding(context_dict["time"], context_dict["weekday"])
+    def get_modeEmbedding(self):
+        return self.emb_mode
 
-        if self.if_include_mode:
-            emb = emb + self.emb_mode(context_dict["mode"])
+    def forward(self, src, context_dict) -> Tensor:
+        if self.if_include_loc:
+            emb = self.emb_loc(src)
+        else:
+            # use mode as the first embedding (only for predicting mode)
+            emb = self.emb_mode(context_dict["mode"])
+
+        # location and mode
+        if self.if_include_loc and self.if_include_mode:
+            emb = emb + self.emb_mode(context_dict["mode"])        
+
+
+        if self.if_include_time:
+            if self.emb_type == "add":
+                emb = emb + self.temporal_embedding(context_dict["time"], context_dict["weekday"])
+            else:
+                emb = torch.cat([emb, self.temporal_embedding(context_dict["time"], context_dict["weekday"])], dim=-1)
 
         if self.if_pos_encoder:
             return self.pos_encoder(emb * math.sqrt(self.d_input))

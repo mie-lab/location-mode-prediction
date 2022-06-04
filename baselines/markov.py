@@ -129,7 +129,8 @@ def get_performance_measure(true_ls, pred_ls):
     rank = np.array(rank_ls)
 
     # c =
-    rank = np.divide(1, rank, out=np.zeros_like(rank), where=rank != 0)
+    if rank.sum() != 0:
+        rank = np.divide(1, rank, out=np.zeros_like(rank), where=rank != 0)
     # rank[rank == np.inf] = 0
     # append the result
     res.append(rank.sum())
@@ -148,50 +149,40 @@ def get_markov_res(train, test, n=2):
 
 #
 
+if __name__ == "__main__":
+    #  the number of previous locations considered (n-Markov)
+    n = 1
 
-#  the number of previous locations considered (n-Markov)
-n = 1
+    #
+    source_root = r".\data"
+    # "gc" or "yumuv"
+    dataset = "yumuv"
+    # read data
+    inputData = pd.read_csv(os.path.join(source_root, f"dataSet_{dataset}.csv"))
+    inputData.sort_values(by=["user_id", "start_day", "start_min"], inplace=True)
 
-#
-source_root = r"D:/NPP/data/"
-# "gc" or "geolife"
-dataset = "geolife"
-# read data
-inputData = pd.read_csv(os.path.join(source_root, f"dataSet_{dataset}.csv"))
-inputData.sort_values(by=["user_id", "start_day", "start_min"], inplace=True)
+    # split data
+    train_data, vali_data, test_data = splitDataset(inputData)
 
-# split data
-train_data, vali_data, test_data = splitDataset(inputData)
+    print(train_data.shape, vali_data.shape, test_data.shape)
 
-print(train_data.shape, vali_data.shape, test_data.shape)
+    true_all_ls = []
+    pred_all_ls = []
+    res_ls = []
+    for user in tqdm(train_data["user_id"].unique()):
+        # get the train and test sets for each user
+        curr_train = train_data.loc[train_data["user_id"] == user]
+        curr_test = test_data.loc[test_data["user_id"] == user]
 
-# filter records that we do not consider
-valid_ids = pickle.load(open((os.path.join(source_root, f"valid_ids_{dataset}.pk")), "rb"))
-
-# train vali and test then contains the same records as our dataloader
-train_data = train_data.loc[train_data["id"].isin(valid_ids)]
-vali_data = vali_data.loc[vali_data["id"].isin(valid_ids)]
-test_data = test_data.loc[test_data["id"].isin(valid_ids)]
-
-print(train_data.shape, vali_data.shape, test_data.shape)
-
-true_all_ls = []
-pred_all_ls = []
-res_ls = []
-for user in tqdm(train_data["user_id"].unique()):
-    # get the train and test sets for each user
-    curr_train = train_data.loc[train_data["user_id"] == user]
-    curr_test = test_data.loc[test_data["user_id"] == user]
-
-    # get the results
-    res = get_markov_res(curr_train, curr_test, n=n)
-    res_ls.append(res)
+        # get the results
+        res = get_markov_res(curr_train, curr_test, n=n)
+        res_ls.append(res)
 
 
-result = pd.DataFrame(res_ls)
+    result = pd.DataFrame(res_ls)
 
-print(result["correct@1"].sum() / result["total"].sum() * 100)
-print(result["correct@5"].sum() / result["total"].sum() * 100)
-print(result["correct@10"].sum() / result["total"].sum() * 100)
-print(result["rr"].sum() / result["total"].sum() * 100)
-print(result["f1"].mean() * 100)
+    print(result["correct@1"].sum() / result["total"].sum() * 100)
+    print(result["correct@5"].sum() / result["total"].sum() * 100)
+    print(result["correct@10"].sum() / result["total"].sum() * 100)
+    print(result["rr"].sum() / result["total"].sum() * 100)
+    print(result["f1"].mean() * 100)
