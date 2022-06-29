@@ -49,20 +49,20 @@
     ],
     // auto save
     "editor.wordWrap": "off",
-    "editor.formatOnSave": true,
+    "editor.formatOnSave": false,
+    "[python]": {
+        "editor.formatOnSave": true,
+    },
     "files.autoSave": "afterDelay",
     "files.autoSaveDelay": 5000,
     // other
-    "autoDocstring.docstringFormat": "numpy",
     "git.autofetch": true,
     "git.enableSmartCommit": true,
-    "workbench.iconTheme": "material-icon-theme",
+    "editor.rulers": [80,120],
     "workbench.startupEditor": "welcomePage",
     "workbench.sideBar.location": "left",
     "workbench.editorAssociations": {
-        "*.ipynb": "jupyter.notebook.ipynb"
+        "*.ipynb": "jupyter-notebook"
     },
-    "vsicons.dontShowNewVersionMessage": true,
     "diffEditor.ignoreTrimWhitespace": false,
-    "python.formatting.blackPath": "",
 }

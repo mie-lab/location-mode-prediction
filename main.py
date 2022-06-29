@@ -40,6 +40,7 @@ def single_run(config, device, log_dir):
 
     return result_ls
 
+
 def init_save_path(config):
     """define the path to save, and save the configuration file."""
     if config.networkName == "rnn" and config.attention:
@@ -58,7 +59,9 @@ def init_save_path(config):
 if __name__ == "__main__":
     # load configs
     parser = argparse.ArgumentParser()
-    parser.add_argument('config', type=str, nargs='?', help= 'Path to the config file.', default="config/gc/transformer.yml")
+    parser.add_argument(
+        "config", type=str, nargs="?", help="Path to the config file.", default="config/gc/transformer.yml"
+    )
     args = parser.parse_args()
     config = load_config(args.config)
     config = edict(config)
@@ -66,14 +69,14 @@ if __name__ == "__main__":
     # save the conf
     log_dir = init_save_path(config)
 
-    # 
+    #
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # run
     result_ls = []
     result_ls.extend(single_run(config, device, log_dir))
 
-    # transfer to dataframe and save the results 
+    # transfer to dataframe and save the results
     result_df = pd.DataFrame(result_ls)
     # print(result_df)
     filename = os.path.join(log_dir, f"{config.dataset}_{config.networkName}.csv")
