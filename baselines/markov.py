@@ -11,13 +11,9 @@ from sklearn.metrics import f1_score
 import matplotlib.pyplot as plt
 import matplotlib
 
-matplotlib.rcParams["figure.dpi"] = 300
-matplotlib.rcParams["xtick.labelsize"] = 13
-matplotlib.rcParams["ytick.labelsize"] = 13
 np.set_printoptions(precision=4)
 np.set_printoptions(suppress=True)
 
-colors = plt.rcParams["axes.prop_cycle"].by_key()["color"]
 np.random.seed(0)
 
 

@@ -1,7 +1,5 @@
-from re import X
-import torch
 import numpy as np
-
+import torch
 
 class baselines:
     def __init__(self, train_loader, val_loader, test_loader):

@@ -3,10 +3,11 @@ import torch
 from utils.dataloader import gc_dataset, collate_fn
 from baselines.baselines import baselines
 
-previous_day = 7
-source_root = r"./data/"
+
 
 if __name__ == "__main__":
+    previous_day = 7
+    source_root = r"./data/"
     dataset = "gc"
 
     dataset_train = gc_dataset(source_root, dataset=dataset, data_type="train", previous_day=previous_day)
@@ -22,5 +23,3 @@ if __name__ == "__main__":
     test_loader = torch.utils.data.DataLoader(dataset_test, collate_fn=collate_fn, **kwds_test)
 
     baselines(train_loader, val_loader, test_loader)
-
-    # persistent forecast the best, slightly better than markov + persistent

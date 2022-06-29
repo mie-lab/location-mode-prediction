@@ -4,10 +4,6 @@ import random, torch, os
 import numpy as np
 import pandas as pd
 
-import json
-
-from datetime import datetime
-
 from utils.train import trainNet, test, get_performance_dict
 from utils.train_mobTcast import trainNet_tcast, test_tcast
 from utils.train_mode import trainNet_mode, test_mode
@@ -21,8 +17,7 @@ from models.mobtcast import Mobtcast
 
 
 def load_config(path):
-    """
-    Loads config file:
+    """Load config file.
     Args:
         path (str): path to the config file
     Returns:
@@ -40,9 +35,7 @@ def load_config(path):
 
 
 def setup_seed(seed):
-    """
-    fix random seed for deterministic training
-    """
+    """Fix random seed for deterministic training."""
     torch.manual_seed(seed)
     torch.cuda.manual_seed_all(seed)
     np.random.seed(seed)
@@ -50,18 +43,7 @@ def setup_seed(seed):
     torch.backends.cudnn.deterministic = True
 
 
-def get_trainedNets(config, model, train_loader, val_loader, device):
-
-    # define the path to save, and save the configuration
-    if config.networkName == "rnn" and config.attention:
-        networkName = f"{config.dataset}_{config.networkName}_Attn"
-    else:
-        networkName = f"{config.dataset}_{config.networkName}"
-    log_dir = f"./outputs/{networkName}_{str(int(datetime.now().timestamp()))}"
-    if not os.path.exists(log_dir):
-        os.makedirs(log_dir)
-    with open(log_dir + "/conf.json", "w") as fp:
-        json.dump(config, fp, indent=4, sort_keys=True)
+def get_trainedNets(config, model, train_loader, val_loader, device, log_dir):
 
     if config.networkName == "mobtcast":
         best_model, performance = trainNet_tcast(config, model, train_loader, val_loader, device, log_dir=log_dir)
@@ -71,7 +53,7 @@ def get_trainedNets(config, model, train_loader, val_loader, device):
         best_model, performance = trainNet(config, model, train_loader, val_loader, device, log_dir=log_dir)
     performance["type"] = "vali"
 
-    return best_model, performance, log_dir
+    return best_model, performance
 
 
 def get_test_result(config, best_model, test_loader, device):
@@ -178,5 +160,5 @@ def get_dataloaders(config):
     val_loader = torch.utils.data.DataLoader(dataset_val, collate_fn=fn, **kwds_val)
     test_loader = torch.utils.data.DataLoader(dataset_test, collate_fn=fn, **kwds_test)
 
-    print(len(train_loader), len(val_loader), len(test_loader))
+    # print(len(train_loader), len(val_loader), len(test_loader))
     return train_loader, val_loader, test_loader

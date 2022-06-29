@@ -197,19 +197,18 @@ class gc_dataset(torch.utils.data.Dataset):
             hist = df.iloc[:index]
             hist = hist.loc[(hist["start_day"] >= (row["start_day"] - self.previous_day))]
 
-            # should be in the valid user ids
+            # should be at least contain 2 history locations
             if len(hist) < 3:
                 continue
 
             data_dict = {}
-            # only for deepmove: consider the last 2 days as curr
+            # only for deepmove: consider the last 2 days as curr and remaining 5 days as history
             if self.model_type == "deepmove":
                 # and all other as history
                 data_dict["history_count"] = len(hist.loc[hist["start_day"] < (row["start_day"] - 1)])
                 # the history sequence and the current sequence shall not be 0
                 if data_dict["history_count"] == 0 or data_dict["history_count"] == len(hist):
                     continue
-
 
             data_dict["X"] = hist["location_id"].values
             data_dict["user_X"] = hist["user_id"].values
@@ -220,9 +219,8 @@ class gc_dataset(torch.utils.data.Dataset):
 
             # the next location is the Y
             data_dict["loc_Y"] = int(row["location_id"])
-            # the next mode is the Y
+            # the next mode is the mode_Y
             data_dict["mode_Y"] = int(row["mode"])
-            # print(data_dict["loc_Y"])
 
             data_single_user.append(data_dict)
 
@@ -369,12 +367,7 @@ def deepmove_collate_fn(batch):
         y_mode_batch
     )
 
-
-
 def test_dataloader(train_loader):
-
-    batch_size = train_loader.batch_size
-
     ave_shape = 0
     hist_shape = 0
     y_shape = 0
@@ -392,18 +385,7 @@ def test_dataloader(train_loader):
         y_mode_shape += y_mode.shape[0]
 
         user_ls.extend(x_dict["user"])
-        # print(inputs)
-        # print(mode)
-        # print(dict)
-        # print(dict["user"].shape)
 
-        # print(, batch_len)
-
-        # print(data)
-        # print(target)
-        # print(dict)
-        # if batch_idx > 10:
-        #     break
     # print(np.max(user_ls), np.min(user_ls))
     print(hist_shape / len(train_loader))
     print(ave_shape / len(train_loader))
