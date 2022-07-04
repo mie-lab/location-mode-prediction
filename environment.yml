@@ -12,6 +12,7 @@ dependencies:
   - yaml
   - pyyaml
   - transformers=4.16.2
+  - cudatoolkit=11.3.1
   - pip
   - pip:
     - trackintel==1.1.7

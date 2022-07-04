@@ -8,6 +8,26 @@ This repository represents the implementation of the paper:
 
 ![flowchart](fig/main_flowchart.png?raw=True)
 
+## Requirements and dependencies
+
+This code has been tested on
+
+- Python 3.9.12, Geopandas 0.10.2, trackintel 1.1.7, PyTorch 1.10.2, CUDA 11.1, GeForce RTX 3090
+
+To create a virtual environment and install the required dependences please run:
+```shell
+    git clone https://github.com/hong2223/NPP_mode.git
+    cd NPP_mode
+    conda env create -f environment.yml
+    conda activate npp-mode
+```
+in your working folder.
+
+
+## Hyperparameters
+All hyperparameter settings are saved in the `.yml` files under the respective dataset folder under `config/`. For example, `config/geolife/transformer.yml` contains hyperparameter settings of the transformer model for the geolife dataset. 
+
+
 ## Reproducing on Geolife dataset
 
 The results in the paper are obtained from SBB Green Class and Yumuv dataset that are not publicly available. We provide a runnable example of the pipeline on the Geolife dataset. The travel mode of the Geolife users are determined through the provided mode labels and using the trackintel function `trackintel.analysis.labelling.predict_transport_mode`. The steps to run the pipeline are as follows:
@@ -39,23 +59,7 @@ for executing the preprocessing script for geolife dataset. The process takes ~1
 ```
 for starting the training process. The dataloader will create intermediate data files and saves them under `data/temp/` folder. The configuration of the current run, the network paramters and the performance indicators will be stored under `outputs/` folder.
 
-## Requirements and dependencies
 
-This code has been tested on
-
-- Python 3.9.12, Geopandas 0.10.2, trackintel 1.1.7, PyTorch 1.10.2, CUDA 11.1, GeForce RTX 3090
-
-To create a virtual environment and install the required dependences please run:
-```shell
-    git clone https://github.com/hong2223/NPP_mode.git
-    cd NPP_mode
-    conda env create -f environment.yml
-    conda activate npp-mode
-```
-in your working folder.
-
-## Hyperparameters
-All hyperparameter settings are saved in the `.yml` files under the respective dataset folder under `config/`. For example, `config/geolife/transformer.yml` contains hyperparameter settings of the transformer model for the geolife dataset. 
 
 ## Contact
 If you have any questions, please let me know: 
