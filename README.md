@@ -28,7 +28,7 @@ in your working folder.
 All hyperparameter settings are saved in the `.yml` files under the respective dataset folder under `config/`. For example, `config/geolife/transformer.yml` contains hyperparameter settings of the transformer model for the geolife dataset. 
 
 
-## Reproducing on Geolife dataset
+## Reproducing on the Geolife dataset
 
 The results in the paper are obtained from SBB Green Class and Yumuv dataset that are not publicly available. We provide a runnable example of the pipeline on the Geolife dataset. The travel mode of the Geolife users are determined through the provided mode labels and using the trackintel function `trackintel.analysis.labelling.predict_transport_mode`. The steps to run the pipeline are as follows:
 

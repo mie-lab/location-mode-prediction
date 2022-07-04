@@ -36,7 +36,7 @@ class TemporalEmbedding(nn.Module):
             self.hour_embed = nn.Embedding(hour_size, d_input)
             self.weekday_embed = nn.Embedding(weekday, d_input)
         elif self.emb_info == "time":
-            self.time_embed = nn.Embedding(self.minute_size*hour_size, d_input)
+            self.time_embed = nn.Embedding(self.minute_size * hour_size, d_input)
         elif self.emb_info == "weekday":
             self.weekday_embed = nn.Embedding(weekday, d_input)
 
@@ -73,7 +73,12 @@ class AllEmbedding(nn.Module):
 
         self.if_include_mode = config.if_embed_mode
         if self.if_include_mode:
-            self.emb_mode = nn.Embedding(8, d_input)
+
+            if config.dataset == "geolife":
+                mode_size = 4
+            else:
+                mode_size = 8
+            self.emb_mode = nn.Embedding(mode_size, d_input)
 
         # time is in minutes, possible time for each day is 60 * 24 // 30
         self.if_include_time = config.if_embed_time
@@ -101,8 +106,7 @@ class AllEmbedding(nn.Module):
 
         # location and mode
         if self.if_include_loc and self.if_include_mode:
-            emb = emb + self.emb_mode(context_dict["mode"])        
-
+            emb = emb + self.emb_mode(context_dict["mode"])
 
         if self.if_include_time:
             if self.emb_type == "add":
