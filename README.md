@@ -21,7 +21,7 @@ The results in the paper are obtained from SBB Green Class and Yumuv dataset tha
 
 ```json
 {
-    "raw_geolife": "./geolife",
+    "raw_geolife": "./geolife"
 }
 ```
 
@@ -50,6 +50,7 @@ To create a virtual environment and install the required dependences please run:
     git clone https://github.com/hong2223/NPP_mode.git
     cd NPP_mode
     conda env create -f environment.yml
+    conda activate npp-mode
 ```
 in your working folder.
 

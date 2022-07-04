@@ -5,8 +5,13 @@ channels:
 dependencies:
   - python=3.9.12
   - geopandas=0.10.2
-  - pytorch=1.7.1
+  - pytorch=1.10.2
+  - pygeos=0.12.0
   - tqdm
+  - easydict
+  - yaml
+  - pyyaml
+  - transformers=4.16.2
   - pip
   - pip:
     - trackintel==1.1.7

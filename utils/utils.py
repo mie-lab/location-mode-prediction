@@ -5,15 +5,17 @@ import numpy as np
 import pandas as pd
 
 from utils.train import trainNet, test, get_performance_dict
-from utils.train_mobTcast import trainNet_tcast, test_tcast
+
+# from utils.train_mobTcast import trainNet_tcast, test_tcast
 from utils.train_mode import trainNet_mode, test_mode
 from utils.dataloader import sp_loc_dataset, collate_fn, deepmove_collate_fn
 
 from models.model import TransEncoder
 from models.model_mode import TransEncoderMode
 from models.RNNs import RNNs
-from models.Deepmove import Deepmove
-from models.mobtcast import Mobtcast
+
+# from models.Deepmove import Deepmove
+# from models.mobtcast import Mobtcast
 
 
 def load_config(path):
@@ -45,24 +47,24 @@ def setup_seed(seed):
 
 def get_trainedNets(config, model, train_loader, val_loader, device, log_dir):
 
-    if config.networkName == "mobtcast":
-        best_model, performance = trainNet_tcast(config, model, train_loader, val_loader, device, log_dir=log_dir)
-    elif config.networkName == "transformer_mode":
-        best_model, performance = trainNet_mode(config, model, train_loader, val_loader, device, log_dir=log_dir)
-    else:
-        best_model, performance = trainNet(config, model, train_loader, val_loader, device, log_dir=log_dir)
+    # if config.networkName == "mobtcast":
+    #     best_model, performance = trainNet_tcast(config, model, train_loader, val_loader, device, log_dir=log_dir)
+    # elif config.networkName == "transformer_mode":
+    #     best_model, performance = trainNet_mode(config, model, train_loader, val_loader, device, log_dir=log_dir)
+    # else:
+    best_model, performance = trainNet(config, model, train_loader, val_loader, device, log_dir=log_dir)
     performance["type"] = "vali"
 
     return best_model, performance
 
 
 def get_test_result(config, best_model, test_loader, device):
-    if config.networkName == "mobtcast":
-        return_dict, user_mode_dict = test_tcast(config, best_model, test_loader, device)
-    elif config.networkName == "transformer_mode":
-        return_dict, user_mode_dict = test_mode(config, best_model, test_loader, device)
-    else:
-        return_dict, user_mode_dict = test(config, best_model, test_loader, device)
+    # if config.networkName == "mobtcast":
+    #     return_dict, user_mode_dict = test_tcast(config, best_model, test_loader, device)
+    # elif config.networkName == "transformer_mode":
+    #     return_dict, user_mode_dict = test_mode(config, best_model, test_loader, device)
+    # else:
+    return_dict, user_mode_dict = test(config, best_model, test_loader, device)
     performance = get_performance_dict(return_dict)
     performance["type"] = "test"
 
@@ -81,14 +83,14 @@ def get_test_result(config, best_model, test_loader, device):
 def get_models(config, device):
     total_params = 0
 
-    if config.networkName == "deepmove":
-        model = Deepmove(config=config).to(device)
-    elif config.networkName == "transformer":
+    if config.networkName == "transformer":
         model = TransEncoder(config=config).to(device)
+    # elif config.networkName == "deepmove":
+    #     model = Deepmove(config=config).to(device)
     elif config.networkName == "rnn":
         model = RNNs(config=config).to(device)
-    elif config.networkName == "mobtcast":
-        model = Mobtcast(config=config).to(device)
+    # elif config.networkName == "mobtcast":
+    #     model = Mobtcast(config=config).to(device)
     elif config.networkName == "transformer_mode":
         model = TransEncoderMode(config=config).to(device)
 
