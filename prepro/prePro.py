@@ -293,18 +293,14 @@ def read_data(config):
 
 if __name__ == "__main__":
     # read file storage
-    DBLOGIN_FILE = os.path.join(".", "dblogin.json")
+    DBLOGIN_FILE = os.path.join(".", "paths.json")
     with open(DBLOGIN_FILE) as json_file:
         CONFIG = json.load(json_file)
 
     # dataset = {"gc", "yumuv"}
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "dataset", type=str, nargs="?", help="Dataset to preprocess", default="gc"
-    )
-    parser.add_argument(
-        "epsilon", type=int, nargs="?", help="epsilon for dbscan to detect locations", default=20
-    )
+    parser.add_argument("dataset", type=str, nargs="?", help="Dataset to preprocess", default="gc")
+    parser.add_argument("epsilon", type=int, nargs="?", help="epsilon for dbscan to detect locations", default=20)
     args = parser.parse_args()
 
     get_npp_dataset(epsilon=args.epsilon, dataset=args.dataset, config=CONFIG)

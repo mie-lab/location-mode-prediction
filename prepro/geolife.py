@@ -17,49 +17,38 @@ from shapely import wkt
 import argparse
 
 # trackintel
-from trackintel.analysis.tracking_quality import temporal_tracking_quality, _split_overlaps
-from trackintel.io.dataset_reader import read_geolife
+from trackintel.io.dataset_reader import read_geolife, geolife_add_modes_to_triplegs
 from trackintel.preprocessing.triplegs import generate_trips
+from trackintel.analysis.labelling import predict_transport_mode
+from trackintel.geogr.distances import calculate_haversine_length
 import trackintel as ti
 
 # from config import config
-from utils import filter_duplicates, get_time, get_mode, preprocess_to_trackintel
+from utils import filter_duplicates, get_time, preprocess_to_trackintel
+
 
 def get_npp_dataset(config, epsilon=50, dataset="gc"):
     """Construct the raw staypoint with location id dataset."""
-    ## read and change name to trackintel format
-    sp = pd.read_csv(os.path.join(config[f"raw_{dataset}"], "stps.csv"))
-    tpls = pd.read_csv(os.path.join(config[f"raw_{dataset}"], "tpls.csv"))
+    ## read
+    pfs, mode_labels = read_geolife(os.path.join(config[f"raw_geolife"], "data"), print_progress=True)
+    # generate staypoints, triplegs and trips
+    pfs, sp = pfs.as_positionfixes.generate_staypoints(
+        time_threshold=5.0, gap_threshold=1e6, print_progress=True, n_jobs=-1
+    )
+    pfs, tpls = pfs.as_positionfixes.generate_triplegs(sp)
+    tpls = geolife_add_modes_to_triplegs(tpls, mode_labels)
 
-    # initial cleaning
-    sp.rename(columns={"activity": "is_activity"}, inplace=True)
+    sp = ti.analysis.labelling.create_activity_flag(sp, time_threshold=15)
 
-    # transform to trackintel format
-    sp = preprocess_to_trackintel(sp)
-    tpls = preprocess_to_trackintel(tpls)
+    sp, tpls, trips = ti.preprocessing.triplegs.generate_trips(sp, tpls, gap_threshold=15)
+
+    # assign mode
+    tpls["pred_mode"] = predict_transport_mode(tpls)["mode"]
+    tpls.loc[tpls["mode"].isna(), "mode"] = tpls.loc[tpls["mode"].isna(), "pred_mode"]
+    tpls.drop(columns={"pred_mode"}, inplace=True)
 
     # get the length
-    tpls_proj = tpls.to_crs("EPSG:2056")
-    tpls["length_m"] = tpls_proj.length
-
-    # ensure the timeline of sp and tpls does not overlap
-    sp_no_overlap_time, tpls_no_overlap_time = filter_duplicates(sp.copy().reset_index(), tpls.reset_index())
-
-    # the trackintel trip generation
-    sp, tpls, trips = generate_trips(sp_no_overlap_time, tpls_no_overlap_time, add_geometry=False)
-
-    ## select valid user
-    quality_path = os.path.join(".", "data", "quality", f"{dataset}_slide_filtered.csv")
-    if Path(quality_path).is_file():
-        valid_users = pd.read_csv(quality_path)["user_id"].values
-    else:
-        parent = Path(quality_path).parent.absolute()
-        if not os.path.exists(parent):
-            os.makedirs(parent)
-        valid_users = _calculate_user_quality(sp.copy(), trips.copy(), quality_path, dataset)
-    sp = sp.loc[sp["user_id"].isin(valid_users)]
-    tpls = tpls.loc[tpls["user_id"].isin(valid_users)]
-    trips = trips.loc[trips["user_id"].isin(valid_users)]
+    tpls["length_m"] = calculate_haversine_length(tpls)
 
     groupsize = tpls.groupby("trip_id").size().to_frame(name="triplegNum").reset_index()
     tpls_group = tpls.merge(groupsize, on="trip_id")
@@ -80,7 +69,8 @@ def get_npp_dataset(config, epsilon=50, dataset="gc"):
     res.set_index("id", inplace=True)
 
     trips_with_main_mode = trips.join(res, how="left")
-    trips_with_main_mode_cate = get_mode(trips_with_main_mode, dataset=dataset)
+    trips_with_main_mode = trips_with_main_mode[~trips_with_main_mode["mode"].isna()]
+    trips_with_main_mode_cate = get_mode_geolife(trips_with_main_mode)
 
     print(trips_with_main_mode_cate["mode"].value_counts())
 
@@ -93,7 +83,6 @@ def get_npp_dataset(config, epsilon=50, dataset="gc"):
     )
     # filter noise staypoints
     valid_sp = sp.loc[~sp["location_id"].isna()].copy()
-    # print("After filter non-location staypoints: ", sp.shape[0])
 
     # save locations
     locs = locs[~locs.index.duplicated(keep="first")]
@@ -130,8 +119,31 @@ def get_npp_dataset(config, epsilon=50, dataset="gc"):
 
     sp_time.to_csv(f"./data/dataSet_{dataset}.csv", index=False)
 
+
+def get_mode_geolife(df):
+    # slow_mobility
+    df.loc[df["mode"] == "slow_mobility", "mode"] = "slow"
+    df.loc[df["mode"] == "bike", "mode"] = "slow"
+    df.loc[df["mode"] == "walk", "mode"] = "slow"
+    df.loc[df["mode"] == "run", "mode"] = "slow"
+
+    # motorized_mobility
+    df.loc[df["mode"] == "motorized_mobility", "mode"] = "motorized"
+    df.loc[df["mode"] == "bus", "mode"] = "motorized"
+    df.loc[df["mode"] == "car", "mode"] = "motorized"
+    df.loc[df["mode"] == "subway", "mode"] = "motorized"
+    df.loc[df["mode"] == "taxi", "mode"] = "motorized"
+    df.loc[df["mode"] == "train", "mode"] = "motorized"
+    df.loc[df["mode"] == "boat", "mode"] = "motorized"
+
+    # fast_mobility
+    df.loc[df["mode"] == "fast_mobility", "mode"] = "fast"
+    df.loc[df["mode"] == "airplane", "mode"] = "fast"
+    return df
+
+
 if __name__ == "__main__":
-    DBLOGIN_FILE = os.path.join(".", "dblogin.json")
+    DBLOGIN_FILE = os.path.join(".", "paths.json")
     with open(DBLOGIN_FILE) as json_file:
         CONFIG = json.load(json_file)
 
