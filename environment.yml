@@ -1,0 +1,12 @@
+name: npp-mode
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9.12
+  - geopandas=0.10.2
+  - torch=1.7.1
+  - tqdm
+  - pip
+  - pip:
+    - trackintel==1.1.7
