@@ -6,6 +6,8 @@ This repository represents the implementation of the paper:
 [Ye Hong](https://scholar.google.com/citations?user=dnaRSnwAAAAJ&hl=en), [Henry Martin](https://n.ethz.ch/~martinhe/), [Martin Raubal](https://raubal.ethz.ch/)\
 | [IKG, ETH Zurich](https://gis.ethz.ch/en/) | [IARAI](https://www.iarai.ac.at/) |
 
+![flowchart](fig/main_flowchart.png?raw=True)
+
 ### Code and paper are coming soon! 
 
 ### Contact
