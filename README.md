@@ -45,11 +45,13 @@ This code has been tested on
 
 - Python 3.9.12, Geopandas 0.10.2, trackintel 1.1.7, PyTorch 1.10.2, CUDA 11.1, GeForce RTX 3090
 
-run 
+To create a virtual environment and install the required dependences please run:
 ```shell
+    git clone https://github.com/hong2223/NPP_mode.git
+    cd NPP_mode
     conda env create -f environment.yml
 ```
-to create a virtual conda environment and install all required dependencies for running the code.
+in your working folder.
 
 ## Hyperparameters
 All hyperparameter settings are saved in the `.yml` files under the respective dataset folder under `config/`. For example, `config/geolife/transformer.yml` contains hyperparameter settings of the transformer model for the geolife dataset. 
