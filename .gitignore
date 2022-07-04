@@ -8,7 +8,7 @@ outputs/
 models/Deepmove.py
 models/mobtcast.py
 utils/train_mobTcast.py
-geolife/*
+geolife/Data
 
 # Mac
 .DS_Store
