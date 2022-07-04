@@ -1,19 +1,7 @@
 import json
 import os
-import pickle as pickle
-from sklearn.preprocessing import OrdinalEncoder
 from pathlib import Path
-
 import pandas as pd
-import numpy as np
-import geopandas as gpd
-from tqdm import tqdm
-import datetime
-
-from joblib import Parallel, delayed
-import multiprocessing
-
-from shapely import wkt
 import argparse
 
 # trackintel
@@ -24,7 +12,7 @@ from trackintel.geogr.distances import calculate_haversine_length
 import trackintel as ti
 
 # from config import config
-from utils import filter_duplicates, get_time, preprocess_to_trackintel
+from utils import get_time
 
 
 def get_npp_dataset(config, epsilon=50, dataset="gc"):
@@ -35,12 +23,14 @@ def get_npp_dataset(config, epsilon=50, dataset="gc"):
     pfs, sp = pfs.as_positionfixes.generate_staypoints(
         time_threshold=5.0, gap_threshold=1e6, print_progress=True, n_jobs=-1
     )
+    sp["duration"] = (sp["finished_at"] - sp["started_at"]).dt.total_seconds()
+    
     pfs, tpls = pfs.as_positionfixes.generate_triplegs(sp)
     tpls = geolife_add_modes_to_triplegs(tpls, mode_labels)
 
     sp = ti.analysis.labelling.create_activity_flag(sp, time_threshold=15)
 
-    sp, tpls, trips = ti.preprocessing.triplegs.generate_trips(sp, tpls, gap_threshold=15)
+    sp, tpls, trips = ti.preprocessing.triplegs.generate_trips(sp, tpls, gap_threshold=15, add_geometry=False)
 
     # assign mode
     tpls["pred_mode"] = predict_transport_mode(tpls)["mode"]
@@ -88,6 +78,9 @@ def get_npp_dataset(config, epsilon=50, dataset="gc"):
     locs = locs[~locs.index.duplicated(keep="first")]
     filtered_locs = locs.loc[locs.index.isin(sp["location_id"].unique())]
 
+    path = Path(os.path.join(".", "data"))
+    if not os.path.exists(path):
+        os.makedirs(path)
     filtered_locs.as_locations.to_csv(os.path.join(".", "data", f"locations_{dataset}.csv"))
 
     # merge staypoint with trips info
@@ -111,13 +104,13 @@ def get_npp_dataset(config, epsilon=50, dataset="gc"):
     sp_time = sp.groupby("user_id").apply(get_time)
 
     # get the time info
-    sp_time.drop(columns={"finished_at", "started_at", "geom"}, inplace=True)
+    sp_time.drop(columns={"finished_at", "started_at", "geom", "elevation"}, inplace=True)
     sp_time.sort_values(by=["user_id", "start_day", "start_min"], inplace=True)
     sp_time = sp_time.reset_index(drop=True)
     sp_time["location_id"] = sp_time["location_id"].astype(int)
     sp_time["user_id"] = sp_time["user_id"].astype(int)
 
-    sp_time.to_csv(f"./data/dataSet_{dataset}.csv", index=False)
+    sp_time.to_csv(os.path.join(".", "data", f"dataSet_{dataset}.csv"), index=False)
 
 
 def get_mode_geolife(df):

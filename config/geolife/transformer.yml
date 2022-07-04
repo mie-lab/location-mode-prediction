@@ -1,25 +1,29 @@
 misc:
-  dataset: gc
-  # 9518 known locations, ranging from 2 to 9519
+  dataset: geolife
+  # 2079 known locations, ranging from 2 to 2080
   # 0 reserved for padding, 1 reserved for unknown
-  total_loc_num: 9520
-  # 93 users, ranging from 1 to 93
+  total_loc_num: 2081
+  # 111 users, ranging from 1 to 111
   # 0 reserved for padding
-  total_user_num: 94
+  total_user_num: 112
 
   # 
+  if_embed_loc: True
   if_embed_user: True
+
   if_embed_time: True
-  if_embed_mode: False
+  if_embed_mode: True
+  # 
+  if_embed_next_mode: False
   # loss
-  if_loss_mode: False
-  
+  if_loss_mode: True
+
   # how many days in the past we consider
   previous_day: 7
-  verbose: False
+  verbose: True
   debug: False
   batch_size: 256
-  print_step: 10
+  print_step: 5
   
 
 embedding:
@@ -27,22 +31,22 @@ embedding:
   base_emb_size: 64
   # user_embedding added at the end 
   user_emb_size: 16
+  
 
 model:
-  networkName: deepmove
-  # only for LSTM: LSTM or GRU
-  attention: False
-  rnn_type: LSTM
-  hidden_size: 64
+  networkName: transformer
+  # tuned 
+  num_encoder_layers: 4
+  nhead: 8
+  dim_feedforward: 256
+  dropout: 0.1
   fc_dropout: 0.1
-
 
 optimiser:
   optimizer: Adam
   max_epoch: 100
   lr: 0.001
-  weight_decay: 0.00001
-  # lr: 0.01
+  weight_decay: 0.000001
   # for Adam
   beta1: 0.9
   beta2: 0.999
@@ -51,7 +55,7 @@ optimiser:
   # for warmup
   num_warmup_epochs: 2
   num_training_epochs: 50
-  # for decay
+  # for learning rate decay with early stop
   patience: 3
   lr_step_size: 1
   lr_gamma: 0.1

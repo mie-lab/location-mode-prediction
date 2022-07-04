@@ -7,7 +7,7 @@ import pandas as pd
 from utils.train import trainNet, test, get_performance_dict
 from utils.train_mobTcast import trainNet_tcast, test_tcast
 from utils.train_mode import trainNet_mode, test_mode
-from utils.dataloader import gc_dataset, collate_fn, deepmove_collate_fn
+from utils.dataloader import sp_loc_dataset, collate_fn, deepmove_collate_fn
 
 from models.model import TransEncoder
 from models.model_mode import TransEncoderMode
@@ -73,17 +73,7 @@ def get_test_result(config, best_model, test_loader, device):
             user_mode_ls.append(np.append(perf, np.array([user_id, mode_id])))
 
     result_df = pd.DataFrame(user_mode_ls)
-    result_df.columns = [
-        "correct@1",
-        "correct@3",
-        "correct@5",
-        "correct@10",
-        "f1",
-        "rr",
-        "total",
-        "user_id",
-        "mode_id"
-    ]
+    result_df.columns = ["correct@1", "correct@3", "correct@5", "correct@10", "f1", "rr", "total", "user_id", "mode_id"]
 
     return performance, result_df
 
@@ -101,7 +91,7 @@ def get_models(config, device):
         model = Mobtcast(config=config).to(device)
     elif config.networkName == "transformer_mode":
         model = TransEncoderMode(config=config).to(device)
-    
+
     else:
         raise Error
     total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -129,21 +119,21 @@ def get_dataloaders(config):
         "batch_size": config["batch_size"],
     }
 
-    dataset_train = gc_dataset(
+    dataset_train = sp_loc_dataset(
         config.source_root,
         data_type="train",
         model_type=config.networkName,
         previous_day=config.previous_day,
         dataset=config.dataset,
     )
-    dataset_val = gc_dataset(
+    dataset_val = sp_loc_dataset(
         config.source_root,
         data_type="validation",
         model_type=config.networkName,
         previous_day=config.previous_day,
         dataset=config.dataset,
     )
-    dataset_test = gc_dataset(
+    dataset_test = sp_loc_dataset(
         config.source_root,
         data_type="test",
         model_type=config.networkName,

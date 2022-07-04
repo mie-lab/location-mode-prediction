@@ -25,8 +25,21 @@ The results in the paper are obtained from SBB Green Class and Yumuv dataset tha
 ```
 
 ### Preprocessing
+- run 
+```shell
+    python prePro/geolife.py geolife 20
+```
+for executing the preprocessing script for geolife dataset. The process takes ~15min. `locations_geolife.csv` and `dataset_geolife.csv` will be created under `data\` folder.
 
 ### Run transformer
+- run 
+```shell
+    python main.py config/geolife/transformer.yml
+```
+for starting the training process. The dataloader will create intermediate data files and saves them under `data/temp` folder. The configuration of the current run, the network paramters and the performance indicators will be stored under `outputs` folder.
+
+## Hyperparameters
+All hyperparameter settings are saved in the `.yml` files under the respective dataset folder under `config`. For example, `config/geolife/transformer.yml` contains hyperparameter settings of the transformer model for the geolife dataset. 
 
 ## Contact
 If you have any questions, please let me know: 

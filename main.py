@@ -60,7 +60,7 @@ if __name__ == "__main__":
     # load configs
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "config", type=str, nargs="?", help="Path to the config file.", default="config/gc/transformer.yml"
+        "config", type=str, nargs="?", help="Path to the config file.", default="config/geolife/transformer.yml"
     )
     args = parser.parse_args()
     config = load_config(args.config)

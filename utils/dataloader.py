@@ -15,7 +15,7 @@ from torch.nn.utils.rnn import pad_sequence
 import trackintel as ti
 
 
-class gc_dataset(torch.utils.data.Dataset):
+class sp_loc_dataset(torch.utils.data.Dataset):
     def __init__(
         self,
         source_root,
@@ -39,6 +39,9 @@ class gc_dataset(torch.utils.data.Dataset):
         if Path(save_path).is_file():
             self.data = pickle.load(open(save_path, "rb"))
         else:
+            parent = Path(save_path).parent.absolute()
+            if not os.path.exists(parent):
+                os.makedirs(parent)
             self.data = self.generate_data()
         self.len = len(self.data)
 
@@ -75,7 +78,6 @@ class gc_dataset(torch.utils.data.Dataset):
 
         return x, y, x_dict, y_mode
 
-
     def generate_data(self):
         if self.model_type == "mobtcast":
             loc_file = pd.read_csv(os.path.join(self.root, f"locations_{self.dataset}.csv"))
@@ -84,20 +86,26 @@ class gc_dataset(torch.utils.data.Dataset):
             loc_file = gpd.GeoDataFrame(loc_file, crs="EPSG:4326", geometry="center")
             loc_file["lng"] = loc_file.geometry.x
             loc_file["lat"] = loc_file.geometry.y
-            loc_file.drop(columns=["center","user_id","extent"], inplace=True)
+            loc_file.drop(columns=["center", "user_id", "extent"], inplace=True)
 
         ori_data = pd.read_csv(os.path.join(self.root, f"dataSet_{self.dataset}.csv"))
         ori_data.sort_values(by=["user_id", "start_day", "start_min"], inplace=True)
 
-        # encoder user
-        enc = OrdinalEncoder(dtype=np.int64)
-        ori_data["user_id"] = enc.fit_transform(ori_data["user_id"].values.reshape(-1, 1)) + 1
+        # encode mode
+        enc = OrdinalEncoder(dtype=np.int64).fit(ori_data["mode"].values.reshape(-1, 1))
+        ori_data["mode"] = enc.transform(ori_data["mode"].values.reshape(-1, 1)) + 1
 
         # truncate too long duration, >2days to 2 days
         ori_data.loc[ori_data["duration"] > 60 * 24 * 2 - 1, "duration"] = 60 * 24 * 2 - 1
 
         # classify the datasets, user dependent 0.6, 0.2, 0.2
         train_data, vali_data, test_data = self.splitDataset(ori_data)
+
+        # encoder user
+        enc = OrdinalEncoder(dtype=np.int64).fit(train_data["user_id"].values.reshape(-1, 1))
+        train_data["user_id"] = enc.transform(train_data["user_id"].values.reshape(-1, 1)) + 1
+        vali_data["user_id"] = enc.transform(vali_data["user_id"].values.reshape(-1, 1)) + 1
+        test_data["user_id"] = enc.transform(test_data["user_id"].values.reshape(-1, 1)) + 1
 
         # encode unseen locations in validation and test into 0
         enc = OrdinalEncoder(
@@ -116,10 +124,14 @@ class gc_dataset(torch.utils.data.Dataset):
         )
         if self.model_type == "mobtcast":
             loc_file["id"] = enc.transform(loc_file["id"].values.reshape(-1, 1)) + 2
-            
-            loc_file["lng"]=2*(loc_file["lng"]-loc_file["lng"].min())/(loc_file["lng"].max()-loc_file["lng"].min()) - 1
-            loc_file["lat"]=2*(loc_file["lat"]-loc_file["lat"].min())/(loc_file["lat"].max()-loc_file["lat"].min()) - 1
-            loc_file = loc_file.loc[loc_file["id"]!=1].sort_values(by="id")
+
+            loc_file["lng"] = (
+                2 * (loc_file["lng"] - loc_file["lng"].min()) / (loc_file["lng"].max() - loc_file["lng"].min()) - 1
+            )
+            loc_file["lat"] = (
+                2 * (loc_file["lat"] - loc_file["lat"].min()) / (loc_file["lat"].max() - loc_file["lat"].min()) - 1
+            )
+            loc_file = loc_file.loc[loc_file["id"] != 1].sort_values(by="id")
             loc_file = loc_file[["lng", "lat"]].values.tolist()
             save_path = os.path.join(self.data_dir, f"{self.dataset}_loc_{self.previous_day}.pk")
             save_pk_file(save_path, loc_file)
@@ -147,6 +159,14 @@ class gc_dataset(torch.utils.data.Dataset):
         train_data.drop(columns={"Dataset"}, inplace=True)
         vali_data.drop(columns={"Dataset"}, inplace=True)
         test_data.drop(columns={"Dataset"}, inplace=True)
+
+        train_u = set(train_data["user_id"].unique())
+        val_u = set(vali_data["user_id"].unique())
+        test_u = set(test_data["user_id"].unique())
+        u = set.intersection(train_u, val_u, test_u)
+        train_data = train_data.loc[train_data["user_id"].isin(u)]
+        vali_data = vali_data.loc[vali_data["user_id"].isin(u)]
+        test_data = test_data.loc[test_data["user_id"].isin(u)]
 
         return train_data, vali_data, test_data
 
@@ -297,6 +317,7 @@ def collate_fn(batch):
 
     return x_batch, y_batch, x_dict_batch, y_mode_batch
 
+
 def deepmove_collate_fn(batch):
     """function to collate data samples into batch tensors."""
     # history_batch, curr_batch, tgt_batch = [], [], []
@@ -343,7 +364,7 @@ def deepmove_collate_fn(batch):
     hist_batch = pad_sequence(hist_batch)
     y_batch = torch.tensor(y_batch, dtype=torch.int64)
     y_mode_batch = torch.tensor(y_mode_batch, dtype=torch.int64)
-    
+
     # hist_dict_batch
     hist_dict_batch["user"] = torch.tensor(hist_dict_batch["user"], dtype=torch.int64)
     hist_dict_batch["len"] = torch.tensor(hist_dict_batch["len"], dtype=torch.int64)
@@ -360,12 +381,8 @@ def deepmove_collate_fn(batch):
             continue
         x_dict_batch[key] = pad_sequence(x_dict_batch[key])
 
-    return (
-        (hist_batch, x_batch),
-        y_batch,
-        (hist_dict_batch, x_dict_batch),
-        y_mode_batch
-    )
+    return ((hist_batch, x_batch), y_batch, (hist_dict_batch, x_dict_batch), y_mode_batch)
+
 
 def test_dataloader(train_loader):
     ave_shape = 0
@@ -396,26 +413,14 @@ def test_dataloader(train_loader):
 if __name__ == "__main__":
     source_root = r"./data/"
 
-    dataset_train = gc_dataset(
-        source_root,
-        data_type="train",
-        dataset="yumuv",
-        previous_day=7,
-        model_type="mobtcast"
+    dataset_train = sp_loc_dataset(
+        source_root, data_type="train", dataset="geolife", previous_day=7, model_type="transformer"
     )
-    dataset_val = gc_dataset(
-        source_root,
-        data_type="validation",
-        dataset="yumuv",
-        previous_day=7,
-        model_type="mobtcast"
+    dataset_val = sp_loc_dataset(
+        source_root, data_type="validation", dataset="geolife", previous_day=7, model_type="transformer"
     )
-    dataset_test = gc_dataset(
-        source_root,
-        data_type="test",
-        dataset="yumuv",
-        previous_day=7,
-        model_type="mobtcast"
+    dataset_test = sp_loc_dataset(
+        source_root, data_type="test", dataset="geolife", previous_day=7, model_type="transformer"
     )
 
     kwds = {"shuffle": False, "num_workers": 0, "batch_size": 2}

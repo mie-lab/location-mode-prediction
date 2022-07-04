@@ -1,10 +1,10 @@
 misc:
   dataset: gc
-  # 9875 known locations, ranging from 2 to 9876
+  # 9518 known locations, ranging from 2 to 9519
   # 0 reserved for padding, 1 reserved for unknown
-  total_loc_num: 9877
+  total_loc_num: 9520
   # 93 users, ranging from 1 to 93
-  # 1 reserved for unknown
+  # 0 reserved for padding
   total_user_num: 94
 
   # 
