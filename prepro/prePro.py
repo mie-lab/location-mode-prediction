@@ -1,43 +1,44 @@
 import json
 import os
-import pickle as pickle
-from sklearn.preprocessing import OrdinalEncoder
 from pathlib import Path
 
 import pandas as pd
-import numpy as np
 import geopandas as gpd
-from tqdm import tqdm
+import numpy as np
+
 import datetime
-
-from joblib import Parallel, delayed
-import multiprocessing
-
-from shapely import wkt
+import psycopg2
+import argparse
 
 # trackintel
 from trackintel.analysis.tracking_quality import temporal_tracking_quality, _split_overlaps
-from trackintel.io.dataset_reader import read_geolife
 from trackintel.preprocessing.triplegs import generate_trips
 import trackintel as ti
 
-from utils import filter_duplicates, get_time, get_mode
+# own function
+from utils import filter_duplicates, get_time, get_mode, preprocess_to_trackintel
 
 
 def get_npp_dataset(config, epsilon=50, dataset="gc"):
-    """Construct the raw staypoint with location id dataset from GC data."""
+    """Construct the raw staypoint with location id dataset."""
     ## read and change name to trackintel format
     sp = pd.read_csv(os.path.join(config[f"raw_{dataset}"], "stps.csv"))
     tpls = pd.read_csv(os.path.join(config[f"raw_{dataset}"], "tpls.csv"))
 
+    # initial cleaning
     sp.rename(columns={"activity": "is_activity"}, inplace=True)
-    tpls["startt"], tpls["endt"] = pd.to_datetime(tpls["startt"]), pd.to_datetime(tpls["endt"])
-    tpls["dur_s"] = (tpls["endt"] - tpls["startt"]).dt.total_seconds()
 
-    sp = _preprocess_to_trackintel(sp)
-    tpls = _preprocess_to_trackintel(tpls)
+    # transform to trackintel format
+    sp = preprocess_to_trackintel(sp)
+    tpls = preprocess_to_trackintel(tpls)
 
+    # get the length
+    tpls_proj = tpls.to_crs("EPSG:2056")
+    tpls["length_m"] = tpls_proj.length
+
+    # ensure the timeline of sp and tpls does not overlap
     sp_no_overlap_time, tpls_no_overlap_time = filter_duplicates(sp.copy().reset_index(), tpls.reset_index())
+
     # the trackintel trip generation
     sp, tpls, trips = generate_trips(sp_no_overlap_time, tpls_no_overlap_time, add_geometry=False)
 
@@ -46,14 +47,13 @@ def get_npp_dataset(config, epsilon=50, dataset="gc"):
     if Path(quality_path).is_file():
         valid_users = pd.read_csv(quality_path)["user_id"].values
     else:
-        valid_users = _calculate_user_quality(sp, trips, quality_path, dataset)
+        parent = Path(quality_path).parent.absolute()
+        if not os.path.exists(parent):
+            os.makedirs(parent)
+        valid_users = _calculate_user_quality(sp.copy(), trips.copy(), quality_path, dataset)
     sp = sp.loc[sp["user_id"].isin(valid_users)]
     tpls = tpls.loc[tpls["user_id"].isin(valid_users)]
     trips = trips.loc[trips["user_id"].isin(valid_users)]
-
-    # get the length
-    tpls_proj = tpls.to_crs("EPSG:2056")
-    tpls["length_m"] = tpls_proj.length
 
     groupsize = tpls.groupby("trip_id").size().to_frame(name="triplegNum").reset_index()
     tpls_group = tpls.merge(groupsize, on="trip_id")
@@ -76,6 +76,8 @@ def get_npp_dataset(config, epsilon=50, dataset="gc"):
     trips_with_main_mode = trips.join(res, how="left")
     trips_with_main_mode_cate = get_mode(trips_with_main_mode, dataset=dataset)
 
+    print(trips_with_main_mode_cate["mode"].value_counts())
+
     # filter activity staypoints
     sp = sp.loc[sp["is_activity"] == True].drop(columns=["is_activity", "trip_id", "next_trip_id"])
 
@@ -85,7 +87,7 @@ def get_npp_dataset(config, epsilon=50, dataset="gc"):
     )
     # filter noise staypoints
     valid_sp = sp.loc[~sp["location_id"].isna()].copy()
-    print("After filter non-location staypoints: ", sp.shape[0])
+    # print("After filter non-location staypoints: ", sp.shape[0])
 
     # save locations
     locs = locs[~locs.index.duplicated(keep="first")]
@@ -180,12 +182,6 @@ def _calculate_user_quality(sp, trips, file_path, dataset):
     return filter_after_user_quality["user_id"].values
 
 
-def __filter_user(df, min_thres, mean_thres):
-    consider = df.loc[df["quality"] != 0]
-    if (consider["quality"].min() > min_thres) and (consider["quality"].mean() > mean_thres):
-        return df
-
-
 def __get_tracking_quality(df, window_size):
 
     weeks = (df["finished_at"].max() - df["started_at"].min()).days // 7
@@ -215,32 +211,84 @@ def __filter_user(df, min_thres, mean_thres):
         return df
 
 
-def _preprocess_to_trackintel(df):
-    """Change dataframe to trackintel compatible format"""
-    df.rename(
-        columns={
-            "userid": "user_id",
-            "startt": "started_at",
-            "endt": "finished_at",
-            "dur_s": "duration",
-        },
+def get_con(LOGIN_DATA):
+    con = psycopg2.connect(
+        dbname=LOGIN_DATA["database"],
+        user=LOGIN_DATA["user"],
+        password=LOGIN_DATA["password"],
+        host=LOGIN_DATA["host"],
+        port=LOGIN_DATA["port"],
+    )
+    return con
+
+
+def read_data(config):
+    # read the trips
+    print("Reading staypoints!")
+    sp = gpd.read_postgis(
+        sql="SELECT * FROM raw_myway.story_line_only_fk_cg",
+        con=get_con(config),
+        geom_col="geom_stay",
+        index_col="id",
+    )
+
+    print("Reading triplegs!")
+    tpls = gpd.read_postgis(
+        sql="SELECT * FROM raw_myway.story_line_only_fk_cg",
+        con=get_con(config),
+        geom_col="geom_track",
+        index_col="id",
+    )
+
+    sp = sp.loc[sp["story_line_type"] == "STAY"]
+    tpls = tpls.loc[tpls["story_line_type"] == "TRACK"]
+
+    sp.drop(
+        columns=[
+            "story_line_type",
+            "track_mode",
+            "inserted",
+            "updated",
+            "deleted",
+            "confirmed",
+            "geom_track",
+            "study_id",
+        ],
         inplace=True,
     )
-    # drop invalid
-    df.drop(index=df[df["duration"] < 0].index, inplace=True)
+    tpls.drop(
+        columns=[
+            "story_line_type",
+            "inserted",
+            "updated",
+            "deleted",
+            "confirmed",
+            "geom_stay",
+            "study_id",
+            "stay_purpose",
+        ],
+        inplace=True,
+    )
 
-    # read the time info
-    df["started_at"] = pd.to_datetime(df["started_at"])
-    df["finished_at"] = pd.to_datetime(df["finished_at"])
-    df["started_at"] = df["started_at"].dt.tz_localize(tz="utc")
-    df["finished_at"] = df["finished_at"].dt.tz_localize(tz="utc")
+    sp.rename(columns={"user_fk": "user_id", "stay_purpose": "purpose", "geom_stay": "geom"}, inplace=True)
+    tpls.rename(columns={"user_fk": "user_id", "track_mode": "mode", "geom_track": "geom"}, inplace=True)
 
-    # choose only activity staypoints
-    df.set_index("id", inplace=True)
-    tqdm.pandas(desc="Load geometry")
-    df["geom"] = df["geom"].progress_apply(wkt.loads)
+    sp["is_activity"] = sp["finished_at"] - sp["started_at"] > datetime.timedelta(minutes=25)
+    sp.loc[sp["purpose"] == "wait", "is_activity"] = False
 
-    return gpd.GeoDataFrame(df, crs="EPSG:4326", geometry="geom")
+    # index management
+    sp.sort_values(by=["user_id", "started_at"], inplace=True)
+    tpls.sort_values(by=["user_id", "started_at"], inplace=True)
+
+    sp.reset_index(drop=True, inplace=True)
+    sp.index.name = "id"
+
+    tpls.reset_index(drop=True, inplace=True)
+    tpls.index.name = "id"
+
+    # save
+    sp.to_csv(os.path.join(config[f"raw_yumuv"], "stps.csv"))
+    tpls.to_csv(os.path.join(config[f"raw_yumuv"], "tpls.csv"))
 
 
 if __name__ == "__main__":
@@ -249,8 +297,14 @@ if __name__ == "__main__":
     with open(DBLOGIN_FILE) as json_file:
         CONFIG = json.load(json_file)
 
-    # dataset = {"gc", "geolife"}
-    dataset = "gc"
-    epsilon = 20
+    # dataset = {"gc", "yumuv"}
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "dataset", type=str, nargs="?", help="Dataset to preprocess", default="gc"
+    )
+    parser.add_argument(
+        "epsilon", type=int, nargs="?", help="epsilon for dbscan to detect locations", default=20
+    )
+    args = parser.parse_args()
 
-    get_npp_dataset(epsilon=epsilon, dataset=dataset, config=CONFIG)
+    get_npp_dataset(epsilon=args.epsilon, dataset=args.dataset, config=CONFIG)

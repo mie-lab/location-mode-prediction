@@ -1,6 +1,9 @@
-
-
 import pandas as pd
+import geopandas as gpd
+from tqdm import tqdm
+
+from shapely import wkt
+
 
 def filter_duplicates(sp, tpls):
 
@@ -13,10 +16,8 @@ def filter_duplicates(sp, tpls):
     sp = df_all.loc[df_all["type"] == "sp"].drop(columns=["type"])
     tpls = df_all.loc[df_all["type"] == "tpl"].drop(columns=["type"])
 
-    # sp = sp[["id", "user_id", "started_at", "finished_at", "geom", "duration", "purpose", "is_activity"]]
     sp = sp[["id", "user_id", "started_at", "finished_at", "geom", "duration", "is_activity"]]
     tpls = tpls[["id", "user_id", "started_at", "finished_at", "geom", "length_m", "duration", "mode"]]
-    # tpls = tpls[["id", "user_id", "started_at", "finished_at", "geom", "duration", "mode"]]
 
     return sp.set_index("id"), tpls.set_index("id")
 
@@ -115,3 +116,33 @@ def get_mode(df, dataset="gc"):
         df.loc[df["mode"] == "coach", "mode"] = "other"
 
     return df
+
+
+def preprocess_to_trackintel(df):
+    """Change dataframe to trackintel compatible format"""
+    df.rename(
+        columns={
+            "userid": "user_id",
+            "startt": "started_at",
+            "endt": "finished_at",
+            "dur_s": "duration",
+        },
+        inplace=True,
+    )
+
+    # read the time info
+    df["started_at"] = pd.to_datetime(df["started_at"])
+    df["finished_at"] = pd.to_datetime(df["finished_at"])
+    df["started_at"] = df["started_at"].dt.tz_localize(tz="utc")
+    df["finished_at"] = df["finished_at"].dt.tz_localize(tz="utc")
+
+    df["duration"] = (df["finished_at"] - df["started_at"]).dt.total_seconds()
+    # drop invalid
+    df.drop(index=df[df["duration"] < 0].index, inplace=True)
+
+    # choose only activity staypoints
+    df.set_index("id", inplace=True)
+    tqdm.pandas(desc="Load geometry")
+    df["geom"] = df["geom"].progress_apply(wkt.loads)
+
+    return gpd.GeoDataFrame(df, crs="EPSG:4326", geometry="geom")
