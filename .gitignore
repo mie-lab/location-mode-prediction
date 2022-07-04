@@ -1,6 +1,6 @@
 # Sensitive
 data/
-dblogin*
+paths*
 trained_models/
 outputs/
 
@@ -8,6 +8,7 @@ outputs/
 models/Deepmove.py
 models/mobtcast.py
 utils/train_mobTcast.py
+geolife/*
 
 # Mac
 .DS_Store

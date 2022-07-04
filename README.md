@@ -8,7 +8,18 @@ This repository represents the implementation of the paper:
 
 ![flowchart](fig/main_flowchart.png?raw=True)
 
-### Code and paper are coming soon! 
+### Reproducing on Geolife dataset
+The results in the paper are obtained from SBB Green Class and Yumuv dataset that are not publicly available. We provide a runnable example of the pipeline on the Geolife dataset. The steps to run the pipeline are as follows:
+
+- Download the repo, install neccessary `Requirements and dependencies`.
+- Download the Geolife GPS tracking dataset from [here](https://www.microsoft.com/en-us/download/details.aspx?id=52367). Unzip and copy the `Data` folder into `geolife/`. The file structure should look like `geolife/Data/000/...`.
+- Create file `paths.json`, and define your working directories by writing:
+
+```json
+{
+    "raw_geolife": "./geolife",
+}
+```
 
 ### Contact
 If you have any questions, please let me know: 

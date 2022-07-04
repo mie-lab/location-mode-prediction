@@ -57,3 +57,4 @@ optimiser:
 
 dataset:
   source_root: ./data/
+  save_root: ./outputs/
