@@ -4,7 +4,6 @@ pytorch
 pygeos
 tqdm
 easydict
-yaml
 pyyaml
 transformers
 cudatoolkit
