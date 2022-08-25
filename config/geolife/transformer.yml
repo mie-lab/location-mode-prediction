@@ -1,8 +1,8 @@
 misc:
   dataset: geolife
-  # 2079 known locations, ranging from 2 to 2080
+  # 2011 known locations, ranging from 2 to 2012
   # 0 reserved for padding, 1 reserved for unknown
-  total_loc_num: 2081
+  total_loc_num: 2013
   # 111 users, ranging from 1 to 111
   # 0 reserved for padding
   total_user_num: 112
