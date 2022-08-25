@@ -1,4 +1,4 @@
-name: npp-mode
+name: loc-mode-pred
 channels:
   - conda-forge
   - defaults
@@ -15,4 +15,4 @@ dependencies:
   - cudatoolkit=11.3.1
   - pip
   - pip:
-    - trackintel==1.1.7
+    - trackintel==1.1.10

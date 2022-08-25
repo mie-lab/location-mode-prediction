@@ -17,9 +17,9 @@ This code has been tested on
 To create a virtual environment and install the required dependences please run:
 ```shell
     git clone https://github.com/mie-lab/location-mode-prediction
-    cd NPP_mode
+    cd location-mode-prediction
     conda env create -f environment.yml
-    conda activate npp-mode
+    conda activate loc-mode-pred
 ```
 in your working folder.
 
@@ -50,7 +50,7 @@ The results in the paper are obtained from SBB Green Class and Yumuv dataset tha
 ```shell
     python prePro/geolife.py geolife 20
 ```
-for executing the preprocessing script for geolife dataset. The process takes ~15min. `locations_geolife.csv` and `dataset_geolife.csv` will be created under `data/` folder.
+for executing the preprocessing script for the geolife dataset. The process takes 15-30min. `locations_geolife.csv` and `dataset_geolife.csv` will be created under `data/` folder.
 
 ### 4. Run proposed transformer model
 - run 
