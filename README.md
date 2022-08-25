@@ -16,7 +16,7 @@ This code has been tested on
 
 To create a virtual environment and install the required dependences please run:
 ```shell
-    git clone https://github.com/hong2223/NPP_mode.git
+    git clone https://github.com/mie-lab/location-mode-prediction
     cd NPP_mode
     conda env create -f environment.yml
     conda activate npp-mode
