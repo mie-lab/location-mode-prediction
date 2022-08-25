@@ -140,7 +140,6 @@ def preprocess_to_trackintel(df):
     # drop invalid
     df.drop(index=df[df["duration"] < 0].index, inplace=True)
 
-    # choose only activity staypoints
     df.set_index("id", inplace=True)
     tqdm.pandas(desc="Load geometry")
     df["geom"] = df["geom"].progress_apply(wkt.loads)

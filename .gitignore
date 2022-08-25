@@ -9,6 +9,8 @@ models/Deepmove.py
 models/mobtcast.py
 utils/train_mobTcast.py
 geolife/Data
+config/gc/
+config/yumuv/
 
 # Mac
 .DS_Store
