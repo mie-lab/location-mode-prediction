@@ -12,7 +12,7 @@ This repository represents the implementation of the paper:
 
 This code has been tested on
 
-- Python 3.9.12, Geopandas 0.10.2, trackintel 1.1.7, PyTorch 1.10.2, CUDA 11.1, GeForce RTX 3090
+- Python 3.9.12, Geopandas 0.10.2, trackintel 1.1.10, PyTorch 1.10.2, CUDA 11.1, GeForce RTX 3090
 
 To create a virtual environment and install the required dependences please run:
 ```shell
@@ -45,14 +45,14 @@ The results in the paper are obtained from SBB Green Class and Yumuv dataset tha
 }
 ```
 
-### 3. Preprocessing the dataset
+### 3. Preprocess the dataset
 - run 
 ```shell
     python prePro/geolife.py geolife 20
 ```
 for executing the preprocessing script for the geolife dataset. The process takes 15-30min. `locations_geolife.csv` and `dataset_geolife.csv` will be created under `data/` folder.
 
-### 4. Run proposed transformer model
+### 4. Run the proposed transformer model
 - run 
 ```shell
     python main.py config/geolife/transformer.yml

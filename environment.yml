@@ -1,18 +1,19 @@
 name: loc-mode-pred
 channels:
+  - pytorch
   - conda-forge
   - defaults
 dependencies:
   - python=3.9.12
   - geopandas=0.10.2
-  - pytorch=1.10.2
+  - pytorch=1.12.1
   - pygeos=0.12.0
   - tqdm
   - easydict
   - yaml
   - pyyaml
   - transformers=4.16.2
-  - cudatoolkit=11.3.1
+  - cudatoolkit=11.3
   - pip
   - pip:
     - trackintel==1.1.10
