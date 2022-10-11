@@ -65,14 +65,14 @@ If you find this code useful for your work or use it in your project, please con
 
 ```shell
 @inproceedings{Hong_2022_how,
-author      = {Hong, Ye and Martin, Henry and Raubal, Martin},
-title       = {How do you go where? Improving next location prediction by learning travel mode information using transformers},
-year        = {2022},
-doi         = {10.1145/3557915.3560996},
-booktitle   = {Proceedings of the 30th International Conference on Advances in Geographic Information Systems (SIGSPATIAL '22)},
-location    = {Seattle, Washington, USA},
-publisher   = {Association for Computing Machinery},
-address     = {New York, NY, USA},
+    author      = {Hong, Ye and Martin, Henry and Raubal, Martin},
+    title       = {How do you go where? Improving next location prediction by learning travel mode information using transformers},
+    year        = {2022},
+    doi         = {10.1145/3557915.3560996},
+    booktitle   = {Proceedings of the 30th International Conference on Advances in Geographic Information Systems (SIGSPATIAL '22)},
+    location    = {Seattle, Washington, USA},
+    publisher   = {Association for Computing Machinery},
+    address     = {New York, NY, USA},
 }
 ```
 
