@@ -18,7 +18,7 @@ from utils import get_time
 def get_npp_dataset(config, epsilon=50, dataset="gc"):
     """Construct the raw staypoint with location id dataset."""
     ## read
-    pfs, mode_labels = read_geolife(os.path.join(config[f"raw_geolife"], "data"), print_progress=True)
+    pfs, mode_labels = read_geolife(os.path.join(config[f"raw_geolife"], "Data"), print_progress=True)
     # generate staypoints, triplegs and trips
     pfs, sp = pfs.as_positionfixes.generate_staypoints(
         time_threshold=5.0, gap_threshold=1e6, print_progress=True, n_jobs=-1
