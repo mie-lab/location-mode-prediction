@@ -77,5 +77,5 @@ If you find this code useful for your work or use it in your project, please con
 ```
 
 ## Contact
-If you have any questions, please let me know: 
+If you have any questions, please open an issue or let me know: 
 - Ye Hong {hongy@ethz.ch}
