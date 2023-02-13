@@ -12,7 +12,7 @@ This repository represents the implementation of the paper:
 
 This code has been tested on
 
-- Python 3.9.12, Geopandas 0.10.2, trackintel 1.1.10, PyTorch 1.12.1, cudatoolkit 11.3, GeForce RTX 3090
+- Python 3.9.12, Geopandas 0.12.2, trackintel 1.1.13, PyTorch 1.12.1, cudatoolkit 11.3, GeForce RTX 3090
 
 To create a virtual environment and install the required dependences please run:
 ```shell
