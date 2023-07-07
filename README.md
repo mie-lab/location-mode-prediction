@@ -3,7 +3,7 @@
 This repository represents the implementation of the paper:
 
 ## [How do you go where? Improving next location prediction by learning travel mode information using transformers](https://arxiv.org/abs/2210.04095)
-[Ye Hong](https://scholar.google.com/citations?user=dnaRSnwAAAAJ&hl=en), [Henry Martin](https://n.ethz.ch/~martinhe/), [Martin Raubal](https://raubal.ethz.ch/)\
+[Ye Hong](https://hongyeehh.github.io/), [Henry Martin](https://n.ethz.ch/~martinhe/), [Martin Raubal](https://raubal.ethz.ch/)\
 | [IKG, ETH Zurich](https://gis.ethz.ch/en/) | [IARAI](https://www.iarai.ac.at/) |
 
 ![flowchart](fig/main_flowchart.png?raw=True)
